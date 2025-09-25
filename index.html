@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Ponto Eletrônico - CCMP</title>
+
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.23/jspdf-autotable.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    body { font-family: 'Inter', sans-serif; -webkit-font-smoothing: antialiased; }
+    .page { display: none; }
+    .page.active { display: flex; }
+    .loader {
+      border: 4px solid #f3f3f3; border-top: 4px solid #3498db;
+      border-radius: 50%; width: 40px; height: 40px;
+      animation: spin 1s linear infinite;
+    }
+    @keyframes spin { 0%{ transform:rotate(0deg);} 100%{transform:rotate(360deg);} }
+    .app-page.hidden { display: none; }
+    .status-badge {
+        padding: 2px 8px; border-radius: 9999px; font-size: 0.75rem;
+        font-weight: 600; text-transform: uppercase;
+    }
+    .status-Pendente { background-color: #fef3c7; color: #92400e; }
+    .status-Aprovado, .status-completed { background-color: #d1fae5; color: #065f46; }
+    .status-Reprovado { background-color: #fee2e2; color: #991b1b; }
+      /* Estilos para abas do painel de gestão */
+    .management-tab {
+        padding: 8px 16px;
+        cursor: pointer;
+        border-bottom: 2px solid transparent;
+        transition: all 0.2s;
+    }
+    .management-tab.active {
+        border-color: #3B82F6;
+        color: #3B82F6;
+        font-weight: 600;
+    }
+    .management-tab-content {
+        display: none;
+    }
+    .management-tab-content.active {
+        display: block;
+    }
+  </style>
+</head>
+<body class="bg-gray-100 dark:bg-gray-900 text-gray-800 dark:text-gray-200">
+
+  <div id="loading-screen" class="page active min-h-screen items-center justify-center w-full">
+    <div class="loader"></div>
+  </div>
+
+  <div id="login-screen" class="page min-h-screen items-center justify-center w-full"></div>
+  <div id="register-screen" class="page min-h-screen items-center justify-center w-full"></div>
+  <div id="recover-screen" class="page min-h-screen items-center justify-center w-full"></div>
+
+  <div id="app-container" class="page min-h-screen flex-col w-full">
+    <header class="bg-white dark:bg-gray-800 shadow-md w-full sticky top-0 z-20">
+        </header>
+
+    <main class="flex-grow w-full">
+      <div id="ponto-screen" class="app-page">
+        </div>
+      <div id="history-screen" class="app-page hidden"></div>
+      <div id="requests-screen" class="app-page hidden"></div>
+      <div id="communications-screen" class="app-page hidden"></div>
+      <div id="profile-screen" class="app-page hidden"></div>
+
+      <div id="management-screen" class="app-page hidden">
+          <div class="container mx-auto p-4 sm:p-6 lg:p-8">
+              <h2 class="text-3xl font-bold mb-4 text-gray-800 dark:text-gray-200">Painel de Gestão</h2>
+
+              <div class="border-b border-gray-200 dark:border-gray-700 mb-6">
+                  <nav class="flex -mb-px space-x-6" aria-label="Tabs">
+                      <button class="management-tab active" data-tab="approvals">Aprovações</button>
+                      <button class="management-tab" data-tab="team-view">Visão da Equipe</button>
+                      <button id="management-reports-tab" class="management-tab hidden" data-tab="reports">Relatórios e KPIs</button>
+                      <button class="management-tab" data-tab="time-bank">Banco de Horas</button>
+                  </nav>
+              </div>
+
+              <div id="management-tab-content-container">
+                  <div id="tab-approvals" class="management-tab-content active">
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                          <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                              <h3 class="text-xl font-bold mb-4">Solicitações Pendentes</h3>
+                              <div id="pending-requests-list" class="space-y-4 max-h-96 overflow-y-auto"></div>
+                          </div>
+                          <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                              <h3 class="text-xl font-bold mb-4">Assinaturas Pendentes</h3>
+                              <div id="pending-signatures-list" class="space-y-4 max-h-96 overflow-y-auto"></div>
+                          </div>
+                      </div>
+                  </div>
+
+                  <div id="tab-team-view" class="management-tab-content">
+                       <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                          <h3 class="text-xl font-bold mb-4">Visão Geral da Equipe</h3>
+                          <div class="flex flex-wrap gap-4 mb-4">
+                              <input type="text" id="team-view-filter-name" placeholder="Filtrar por nome..." class="p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600">
+                              <select id="team-view-filter-status" class="p-2 border rounded-md dark:bg-gray-700 dark:border-gray-600">
+                                  <option value="all">Todos os Status</option>
+                                  <option value="ok">Em Dia</option>
+                                  <option value="pending">Com Pendências</option>
+                              </select>
+                          </div>
+                          <div class="overflow-x-auto" id="team-view-table-container"></div>
+                       </div>
+                  </div>
+
+                  <div id="tab-reports" class="management-tab-content">
+                       <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
+                            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                                <h3 class="font-bold text-lg mb-4">Gerar Relatórios Customizados</h3>
+                                <form id="custom-report-form" class="space-y-4">
+                                    <select id="report-type" class="w-full p-2 border rounded-md">
+                                        <option value="hours">Relatório de Horas</option>
+                                        <option value="occurrences">Relatório de Ocorrências</option>
+                                        <option value="consolidated">Relatório Consolidado</option>
+                                    </select>
+                                    <input type="month" id="report-month" class="w-full p-2 border rounded-md">
+                                    <button class="w-full bg-green-600 text-white font-bold py-2 rounded-lg">Gerar PDF</button>
+                                </form>
+                            </div>
+                            <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                                <h3 class="font-bold text-lg mb-4">Desempenho Geral</h3>
+                                <div class="h-64"><canvas id="kpi-absences-chart"></canvas></div>
+                            </div>
+                       </div>
+                  </div>
+
+                  <div id="tab-time-bank" class="management-tab-content">
+                       <div class="bg-white dark:bg-gray-800 rounded-2xl shadow-lg p-6">
+                          <h3 class="text-xl font-bold mb-4">Banco de Horas da Equipe</h3>
+                          <div class="overflow-x-auto" id="time-bank-table-container"></div>
+                       </div>
+                  </div>
+              </div>
+          </div>
+      </div>
+    </main>
+  </div>
+
+  <div id="notification-modal" class="fixed inset-0 bg-black bg-opacity-50 z-50 hidden items-center justify-center"></div>
+  <div id="signature-modal" class="fixed inset-0 bg-black bg-opacity-60 z-50 hidden items-center justify-center"></div>
+
+  <script type="module">
+    // --- 1. IMPORTAÇÕES DO FIREBASE ---
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-app.js";
+    import { getAnalytics } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-analytics.js";
+    import {
+      getAuth, onAuthStateChanged, signOut, createUserWithEmailAndPassword,
+      signInWithEmailAndPassword, sendPasswordResetEmail, signInWithCustomToken
+    } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-auth.js";
+    import {
+      getFirestore, doc, setDoc, getDoc, collection,
+      addDoc, query, where, getDocs, orderBy, updateDoc,
+      serverTimestamp, collectionGroup
+    } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-firestore.js";
+    import {
+      getStorage, ref, uploadBytes, getDownloadURL
+    } from "https://www.gstatic.com/firebasejs/12.3.0/firebase-storage.js";
+
+    // --- 2. CONFIGURAÇÃO DO FIREBASE ---
+    const firebaseConfig = {
+      apiKey: "AIzaSyBI28Xbf2k0mC-4BcHoQxmZEmf0RA2etjk",
+      authDomain: "sistema-eletronico-de-ponto.firebaseapp.com",
+      projectId: "sistema-eletronico-de-ponto",
+      storageBucket: "sistema-eletronico-de-ponto.appspot.com",
+      messagingSenderId: "185584979307",
+      appId: "1:185584979307:web:dc20069bcfa6f71cf7902e",
+      measurementId: "G-JM76QEXR4Q"
+    };
+
+    // --- 3. INICIALIZAÇÃO DO FIREBASE ---
+    const app = initializeApp(firebaseConfig);
+    const analytics = getAnalytics(app);
+    const auth = getAuth(app);
+    const db = getFirestore(app);
+    const storage = getStorage(app);
+
+    // --- 4. CÓDIGO DA APLICAÇÃO ---
+
+    // --- Variáveis, Utilidades, Navegação, Auth (Conteúdo Omitido para Brevidade) ---
+    // (Cole o seu código correspondente a estas seções aqui)
+    let currentUserData = null;
+    const navButtons = {
+        management: document.querySelector('[data-page="management-screen"]') // Exemplo
+    };
+    function navigateAppTo(pageId) { /* Sua lógica de navegação aqui */ }
+    function initializeClock() { /* Sua lógica do relógio aqui */ }
+    async function loadPendingRequests() { /* Sua lógica aqui */ }
+    async function loadPendingSignatures() { /* Sua lógica aqui */ }
+    // ---
+
+    // --- Lógica da Aplicação ---
+    function initializeAppUI() {
+        if (!currentUserData) return;
+        if (['admin', 'manager'].includes(currentUserData.role)) {
+            navButtons.management.classList.remove('hidden');
+        }
+        if (['admin', 'rh'].includes(currentUserData.role)) {
+            document.getElementById('management-reports-tab').classList.remove('hidden');
+        }
+        navigateAppTo("ponto-screen");
+        initializeClock();
+    }
+
+    // --- Dashboard ---
+    // (Cole o seu código do Dashboard aqui)
+    // ...
+
+    // --- GESTÃO ---
+    function setupManagementTabs() {
+        const tabs = document.querySelectorAll('.management-tab');
+        const contents = document.querySelectorAll('.management-tab-content');
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(t => t.classList.remove('active'));
+                tab.classList.add('active');
+                const targetId = `tab-${tab.dataset.tab}`;
+                contents.forEach(c => c.classList.remove('active'));
+                document.getElementById(targetId).classList.add('active');
+
+                // Carregar dados da aba clicada
+                if (tab.dataset.tab === 'team-view') loadTeamView();
+                if (tab.dataset.tab === 'reports') loadKpiDashboard();
+                if (tab.dataset.tab === 'time-bank') loadTimeBank();
+            });
+        });
+    }
+
+    async function loadManagementDashboard() {
+        // Carrega dados da aba padrão (Aprovações)
+        if (['admin', 'manager'].includes(currentUserData?.role)) {
+            loadPendingRequests();
+            loadPendingSignatures();
+        }
+    }
+
+    async function loadTeamView() {
+        const container = document.getElementById('team-view-table-container');
+        container.innerHTML = `<div class="loader"></div>`;
+        // Lógica para buscar usuários da mesma lotação, calcular status e exibir em uma tabela.
+        // Inclui "Alertas Inteligentes" para pendências recorrentes.
+        container.innerHTML = `<p class="p-4 text-gray-500">Funcionalidade de Visão da Equipe em desenvolvimento.</p>`;
+    }
+
+    async function loadKpiDashboard() {
+        // Lógica para carregar gráficos de KPIs
+        const ctx = document.getElementById('kpi-absences-chart').getContext('2d');
+        new Chart(ctx, { /* ... config do gráfico de ocorrências ... */ });
+    }
+
+    async function loadTimeBank() {
+        const container = document.getElementById('time-bank-table-container');
+        container.innerHTML = `<div class="loader"></div>`;
+        // Lógica para calcular e exibir o saldo de horas de cada membro da equipe.
+        container.innerHTML = `<p class="p-4 text-gray-500">Módulo de Banco de Horas em desenvolvimento.</p>`;
+    }
+
+    // --- Inicialização ---
+    setupManagementTabs();
+
+    // (Cole o restante do seu script de inicialização e listeners aqui)
+    // ...
+
+    // Listener principal de autenticação
+    onAuthStateChanged(auth, user => {
+      // (Cole a sua lógica de `onAuthStateChanged` aqui)
+      // Exemplo:
+      // if (user) {
+      //   // Carregar dados do usuário, etc.
+      //   initializeAppUI();
+      // } else {
+      //   // Redirecionar para a tela de login
+      // }
+    });
+
+  </script>
+</body>
+</html>
