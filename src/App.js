@@ -6,7 +6,14 @@ import { getFirestore, doc, setDoc, collection, query, where, orderBy, onSnapsho
 import { LogIn, LogOut, Clock, Calendar, User, Briefcase, RefreshCcw, Loader2, CheckCircle, AlertTriangle, XCircle, Pause, Zap, Mail, ArrowLeft, Users, FileText, Download, Edit, Trash2, X, File, Send, Aperture, BookOpen, Search, Plus, Minus, Home } from 'lucide-react';
 
 // --- Variáveis Globais de Configuração do Ambiente ---
-const firebaseConfig = typeof __firebase_config !== 'undefined' ? JSON.parse(__firebase_config) : {};
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY,
+  authDomain: process.env.REACT_APP_FIREBASE_AUTH_DOMAIN,
+  projectId: process.env.REACT_APP_FIREBASE_PROJECT_ID,
+  storageBucket: process.env.REACT_APP_FIREBASE_STORAGE_BUCKET,
+  messagingSenderId: process.env.REACT_APP_FIREBASE_MESSAGING_SENDER_ID,
+  appId: process.env.REACT_APP_FIREBASE_APP_ID
+};
 const initialAuthToken = typeof __initial_auth_token !== 'undefined' ? __initial_auth_token : null;
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'secretaria-educacao-ponto';
 
