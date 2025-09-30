@@ -122,21 +122,6 @@ function useFirebaseAuthentication() {
             setIsLoading(false);
             setIsAuthReady(true);
         });
-
-        const initialSignIn = async () => {
-            if (isLoading) {
-                try {
-                    if (initialAuthToken) {
-                        await signInWithCustomToken(auth, initialAuthToken);
-                        console.log("Login com token personalizado realizado.");
-                    }
-                } catch (error) {
-                    console.error("Erro durante o login inicial:", error);
-                }
-            }
-        };
-        initialSignIn();
-
         return () => unsubscribe();
     }, [isLoading, fetchUserProfile]);
 
