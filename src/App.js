@@ -1,3 +1,4 @@
+/* global __app_id, __firebase_config */
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
@@ -1133,3 +1134,4 @@ export default function App() {
         </>
     );
 }
+
