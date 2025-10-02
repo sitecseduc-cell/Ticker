@@ -1,70 +1,64 @@
-# Getting Started with Create React App
+Sistema de Ponto Eletrônico (Ticker)
 
-This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
+📖 Sobre o Projeto
+O Ticker é um sistema de Ponto Eletrônico completo, desenvolvido para a Secretaria de Educação. A aplicação permite o registro de ponto, gerenciamento de pessoal, administração de unidades e comunicação interna, tudo em uma interface moderna e responsiva.
 
-## Available Scripts
+Construído com React e Firebase, o sistema oferece diferentes níveis de acesso e funcionalidades, adaptados para três perfis de usuário: Servidor, Gestor e RH/Admin.
 
-In the project directory, you can run:
+✨ Funcionalidades Principais
+O sistema é dividido em painéis, cada um com funcionalidades específicas para o perfil do usuário.
 
-### `npm start`
+Painel do Servidor
+Registro de Ponto: Bate o ponto de entrada, início/fim de pausa e saída.
 
-Runs the app in the development mode.\
-Open [http://localhost:3000](http://localhost:3000) to view it in your browser.
+Banco de Horas: Visualiza o saldo acumulado de horas trabalhadas.
 
-The page will reload when you make changes.\
-You may also see any lint errors in the console.
+Solicitações: Abre solicitações de abono ou justificativa de ausência, com a opção de anexar arquivos.
 
-### `npm test`
+Histórico: Acompanha o histórico de registros e o status das solicitações enviadas.
 
-Launches the test runner in the interactive watch mode.\
-See the section about [running tests](https://facebook.github.io/create-react-app/docs/running-tests) for more information.
+Painel do Gestor
+Aprovação de Solicitações: Analisa, aprova ou reprova as solicitações de ponto enviadas pelos servidores de sua unidade.
 
-### `npm run build`
+Visualização de Anexos: Acessa os arquivos anexados às solicitações para análise.
 
-Builds the app for production to the `build` folder.\
-It correctly bundles React in production mode and optimizes the build for the best performance.
+Gestão da Equipe: Monitora os pedidos e o status de todos os membros da sua unidade.
 
-The build is minified and the filenames include the hashes.\
-Your app is ready to be deployed!
+Painel de Administração (RH)
+Gestão de Usuários: Adiciona, edita e remove usuários do sistema, definindo seus perfis (servidor, gestor, RH) e unidades de lotação.
 
-See the section about [deployment](https://facebook.github.io/create-react-app/docs/deployment) for more information.
+Gestão de Unidades: Cria, renomeia e exclui unidades (escolas, secretarias, etc.) no sistema.
 
-### `npm run eject`
+Comunicação Global: Envia mensagens e notificações que são exibidas para todos os usuários da plataforma.
 
-**Note: this is a one-way operation. Once you `eject`, you can't go back!**
+🛠️ Tecnologias Utilizadas
+Este projeto foi construído com as seguintes tecnologias e ferramentas:
 
-If you aren't satisfied with the build tool and configuration choices, you can `eject` at any time. This command will remove the single build dependency from your project.
+Frontend:
 
-Instead, it will copy all the configuration files and the transitive dependencies (webpack, Babel, ESLint, etc) right into your project so you have full control over them. All of the commands except `eject` will still work, but they will point to the copied scripts so you can tweak them. At this point you're on your own.
+React: Biblioteca principal para a construção da interface.
 
-You don't have to ever use `eject`. The curated feature set is suitable for small and middle deployments, and you shouldn't feel obligated to use this feature. However we understand that this tool wouldn't be useful if you couldn't customize it when you are ready for it.
+Tailwind CSS: Framework de estilização para um design moderno e responsivo.
 
-## Learn More
+Lucide React: Para os ícones da interface.
 
-You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
+Backend & Banco de Dados:
 
-To learn React, check out the [React documentation](https://reactjs.org/).
+Firebase: Utilizado para autenticação, banco de dados em tempo real (Firestore) e armazenamento.
 
-### Code Splitting
+Ferramentas de Desenvolvimento:
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/code-splitting](https://facebook.github.io/create-react-app/docs/code-splitting)
+Create React App: Bootstrap do projeto.
 
-### Analyzing the Bundle Size
+ESLint: Para a linting do código.
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size](https://facebook.github.io/create-react-app/docs/analyzing-the-bundle-size)
+Jest & Testing Library: Para os testes da aplicação.
 
-### Making a Progressive Web App
+🚀 Como Iniciar
+Abra o navegador e insra a URL: https://ticker-ccm.vercel.app/
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app](https://facebook.github.io/create-react-app/docs/making-a-progressive-web-app)
+👥 Criadores Idealizador: ISAAC.J.S.B
 
-### Advanced Configuration
+Desenvolvedores: GIULIANO.L.A.F & HENRIQUE.B
 
-This section has moved here: [https://facebook.github.io/create-react-app/docs/advanced-configuration](https://facebook.github.io/create-react-app/docs/advanced-configuration)
-
-### Deployment
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/deployment](https://facebook.github.io/create-react-app/docs/deployment)
-
-### `npm run build` fails to minify
-
-This section has moved here: [https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify](https://facebook.github.io/create-react-app/docs/troubleshooting#npm-run-build-fails-to-minify)
+📄 Licença Direitos reservados aos Desenvolvedores e usuários autorizados.
