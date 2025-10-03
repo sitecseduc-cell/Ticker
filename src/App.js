@@ -486,7 +486,7 @@ const ServidorDashboard = ({ user, userId, db, handleLogout, setGlobalMessage, u
     const currentButton = buttonMap[nextPointType];
 
     return (
-        <div className="p-4 sm:p-8 min-h-screen">
+        <div className="p-4 sm:p-8">
             <div className="max-w-4xl mx-auto">
                 <header className="mb-8 border-b pb-4 dark:border-slate-700 flex justify-between items-center">
                     <div>
@@ -621,7 +621,7 @@ const GestorDashboard = ({ user, handleLogout, db, setGlobalMessage, unidades, t
     const getFileNameFromUrl = (url) => url.substring(url.lastIndexOf('/') + 1);
 
     return (
-        <div className="p-4 sm:p-8 min-h-screen">
+        <div className="p-4 sm:p-8">
             <div className="max-w-6xl mx-auto">
                  <header className="mb-8 border-b pb-4 dark:border-slate-700 flex justify-between items-center">
                     <div>
@@ -701,7 +701,7 @@ const RHAdminDashboard = ({ user, handleLogout, db, setGlobalMessage, unidades, 
     const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
-        <div className="p-4 sm:p-8 min-h-screen">
+        <div className="p-4 sm:p-8">
             <div className="max-w-6xl mx-auto">
                  <header className="mb-8 border-b dark:border-slate-700 pb-4 flex justify-between items-center">
                     <div>
@@ -1003,8 +1003,8 @@ const UnitManagement = ({ db, appId, setGlobalMessage }) => {
     return (
         <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-blue-100 dark:border-slate-700">
              <div className="flex justify-between items-center mb-4">
-                <h3 className="text-xl font-semibold flex items-center dark:text-gray-100"><Home className="w-5 h-5 mr-2 text-blue-500" /> Gestão de Unidades</h3>
-                <button onClick={() => setUnitToEdit({ name: '' })} className="flex items-center text-sm font-medium bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700"><Plus className="w-5 h-5 mr-1" /> Adicionar Unidade</button>
+                 <h3 className="text-xl font-semibold flex items-center dark:text-gray-100"><Home className="w-5 h-5 mr-2 text-blue-500" /> Gestão de Unidades</h3>
+                 <button onClick={() => setUnitToEdit({ name: '' })} className="flex items-center text-sm font-medium bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700"><Plus className="w-5 h-5 mr-1" /> Adicionar Unidade</button>
              </div>
              <div className="overflow-x-auto">
                  <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
@@ -1158,7 +1158,10 @@ export default function App() {
 
     if (!user) {
         return (
-            <div className="flex flex-col items-center justify-center min-h-screen p-4">
+            <div className="relative flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-slate-900 transition-colors duration-300">
+                <div className="absolute top-5 right-5 z-10">
+                    <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
+                </div>
                 <GlobalMessageContainer message={globalMessage} setMessage={setGlobalMessage} />
                 {currentAuthView === 'login' && <LoginScreen
                     setCurrentView={setCurrentView}
@@ -1172,11 +1175,11 @@ export default function App() {
     }
 
     return (
-        <>
+        <div className="bg-gray-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
             <GlobalMessageContainer message={globalMessage} setMessage={setGlobalMessage} />
             {role === 'servidor' && <ServidorDashboard user={user} userId={user.uid} db={db} handleLogout={handleLogout} setGlobalMessage={setGlobalMessage} unidades={unidades} theme={theme} toggleTheme={toggleTheme} />}
             {role === 'gestor' && <GestorDashboard user={user} handleLogout={handleLogout} db={db} setGlobalMessage={setGlobalMessage} unidades={unidades} theme={theme} toggleTheme={toggleTheme} />}
             {role === 'rh' && <RHAdminDashboard user={user} handleLogout={handleLogout} db={db} setGlobalMessage={setGlobalMessage} unidades={unidades} theme={theme} toggleTheme={toggleTheme} />}
-        </>
+        </div>
     );
 }
