@@ -1,7 +1,7 @@
 /* global __app_id, __firebase_config */
-import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut } from 'firebase/auth';
+import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import {
     getFirestore, doc, setDoc, collection, query, where, orderBy, onSnapshot,
     addDoc, getDoc, updateDoc, deleteDoc
@@ -12,7 +12,7 @@ import {
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon
 } from 'lucide-react';
 
-// --- Configuração do Ambiente Firebase ---
+// --- /src/firebase/config.js (Simulado) ---
 const appId = typeof __app_id !== 'undefined' ? __app_id : 'secretaria-educacao-ponto-demo';
 const firebaseConfigJSON = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
 
@@ -27,7 +27,7 @@ try {
         db = getFirestore(app);
         isFirebaseInitialized = true;
     } else {
-        console.warn("Configuração do Firebase não encontrada. Usando modo de demonstração sem persistência real.");
+        console.warn("Configuração do Firebase não encontrada. Usando modo de demonstração.");
         app = {}; auth = {}; db = null;
     }
 } catch (error) {
@@ -37,13 +37,13 @@ try {
 
 // --- Dados de Demonstração ---
 const DUMMY_ACCOUNTS = {
-    '10001': { email: 'rh@edu.br', password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01' },
-    '20002': { email: 'gestor@edu.br', password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01' },
-    '30003': { email: 'servidor@edu.br', password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01' },
-    '40004': { email: 'estagiario@edu.br', password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01' }
+    'rh@edu.br': { password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01', matricula: '10001' },
+    'gestor@edu.br': { password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01', matricula: '20002' },
+    'servidor@edu.br': { password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01', matricula: '30003' },
+    'estagiario@edu.br': { password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01', matricula: '40004' }
 };
 
-// --- Definições de Estilos e Constantes ---
+// --- Constantes ---
 const STATUS_COLORS = {
     entrada: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400',
     saida: 'text-gray-600 bg-gray-100 dark:bg-gray-700 dark:text-gray-300',
@@ -58,7 +58,12 @@ const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
 const USER_COLLECTION = 'users';
 const UNIT_COLLECTION = 'unidades';
 
-// --- Hook de Tema (Dark/Light Mode) ---
+// --- Contexts ---
+const ThemeContext = createContext();
+const AuthContext = createContext();
+const GlobalMessageContext = createContext();
+
+// --- /src/hooks/useTheme.js (Simulado) ---
 function useTheme() {
     const [theme, setTheme] = useState(() => {
         const savedTheme = localStorage.getItem('theme');
@@ -76,111 +81,146 @@ function useTheme() {
         localStorage.setItem('theme', theme);
     }, [theme]);
 
-    const toggleTheme = () => {
+    const toggleTheme = useCallback(() => {
         setTheme(prevTheme => (prevTheme === 'light' ? 'dark' : 'light'));
-    };
+    }, []);
 
     return { theme, toggleTheme };
 }
 
-// --- Hook de Autenticação ---
-function useFirebaseAuthentication() {
+// --- Providers ---
+const ThemeProvider = ({ children }) => {
+    const { theme, toggleTheme } = useTheme();
+    return (
+        <ThemeContext.Provider value={{ theme, toggleTheme }}>
+            {children}
+        </ThemeContext.Provider>
+    );
+};
+
+const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
-    const [userId, setUserId] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
-    const [isAuthReady, setIsAuthReady] = useState(false);
-    const [role, setRole] = useState(null);
     const [unidades, setUnidades] = useState({});
 
-    useEffect(() => {
-      if (!isFirebaseInitialized) {
-          setUnidades({
-              'unidade-adm-01': { name: 'Controle e Movimentação (Demo)' },
-              'unidade-esc-01': { name: 'Escola Municipal A (Demo)' },
-          });
-          return;
-      };
-      const q = query(collection(db, `/artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
-      const unsubscribe = onSnapshot(q, (snapshot) => {
-          const units = {};
-          snapshot.forEach(doc => units[doc.id] = doc.data());
-          setUnidades(units);
-      });
-      return () => unsubscribe();
-    }, []);
-
-    const fetchUserProfile = useCallback(async (uid, email, roleOverride = null, matricula = null) => {
-        if (!isFirebaseInitialized) {
-            const dummyUser = DUMMY_ACCOUNTS[matricula] || { nome: 'Usuário Demo', email, matricula, role: roleOverride || 'servidor', unidadeId: 'unidade-adm-01' };
-            setUser({ uid, ...dummyUser });
-            setRole(dummyUser.role);
-            return;
-        }
-
-        const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, uid);
-        let userSnap = await getDoc(userDocRef);
-
-        if (!userSnap.exists()) {
-            const defaultRole = roleOverride || 'servidor';
-            const baseData = Object.values(DUMMY_ACCOUNTS).find(acc => acc.email === email) || {};
-            const finalData = {
-                nome: baseData.nome || (email ? email.split('@')[0] : 'Novo Usuário'),
-                email: email,
-                matricula: matricula || uid.substring(0, 8),
-                role: defaultRole,
-                unidadeId: baseData.unidadeId || Object.keys(unidades)[0] || 'unidade-adm-01'
-            };
-            await setDoc(userDocRef, finalData);
-            setUser({ uid, ...finalData });
-            setRole(finalData.role);
-        } else {
-            const userData = userSnap.data();
-            setUser({ uid, ...userData });
-            setRole(userData.role);
-        }
-    }, [unidades]);
-
+    // Carregar unidades
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setIsLoading(false);
-            setIsAuthReady(true);
+            setUnidades({
+                'unidade-adm-01': { name: 'Controle e Movimentação (Demo)' },
+                'unidade-esc-01': { name: 'Escola Municipal A (Demo)' },
+            });
             return;
         }
-
-        const unsubscribe = onAuthStateChanged(auth, async (currentUser) => {
-            if (currentUser) {
-                setUserId(currentUser.uid);
-                await fetchUserProfile(currentUser.uid, currentUser.email || 'anon@ponto.br');
-            } else {
-                setUser(null); setUserId(null); setRole(null);
-            }
-            setIsLoading(false);
-            setIsAuthReady(true);
+        const q = query(collection(db, `/artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const units = {};
+            snapshot.forEach(doc => units[doc.id] = doc.data());
+            setUnidades(units);
         });
         return () => unsubscribe();
-    }, [fetchUserProfile]);
+    }, []);
+
+    // Lógica de autenticação
+    useEffect(() => {
+        if (!isFirebaseInitialized) {
+            setIsLoading(false);
+            return;
+        }
+
+        const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+            if (firebaseUser) {
+                const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, firebaseUser.uid);
+                const userSnap = await getDoc(userDocRef);
+                if (userSnap.exists()) {
+                    setUser({ uid: firebaseUser.uid, ...userSnap.data() });
+                } else {
+                    // Se o usuário existe no Auth mas não no Firestore (caso raro), desloga.
+                    await signOut(auth);
+                    setUser(null);
+                }
+            } else {
+                setUser(null);
+            }
+            setIsLoading(false);
+        });
+        return () => unsubscribe();
+    }, []);
+
+    const handleLogin = useCallback(async (email, password) => {
+        if (!isFirebaseInitialized) { // Modo Demo
+            const account = DUMMY_ACCOUNTS[email.toLowerCase()];
+            if (account && account.password === password) {
+                setUser({ uid: account.matricula, ...account });
+                return;
+            }
+            throw new Error('Matrícula ou senha incorretos.');
+        }
+
+        // Modo Firebase
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, userCredential.user.uid);
+        const userSnap = await getDoc(userDocRef);
+        if (!userSnap.exists()) {
+            throw new Error("Perfil de usuário não encontrado no banco de dados.");
+        }
+        setUser({ uid: userCredential.user.uid, ...userSnap.data() });
+
+    }, []);
 
     const handleLogout = useCallback(async () => {
         if (isFirebaseInitialized) {
             await signOut(auth);
-        } else {
-            setUser(null); // Para modo demo
         }
+        setUser(null);
     }, []);
 
-    return { user, userId, role, isAuthReady, isLoading, db, auth, fetchUserProfile, handleLogout, unidades };
-}
+    const value = useMemo(() => ({
+        user,
+        role: user?.role || null,
+        userId: user?.uid || null,
+        isLoading,
+        unidades,
+        handleLogin,
+        handleLogout,
+        db, // Apenas para componentes que ainda não foram totalmente refatorados
+        auth // Apenas para componentes que ainda não foram totalmente refatorados
+    }), [user, isLoading, unidades, handleLogin, handleLogout]);
 
-// --- Componentes de UI reutilizáveis ---
-const ThemeToggleButton = ({ toggleTheme, theme }) => (
-    <button
-        onClick={toggleTheme}
-        className="p-2 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors"
-        aria-label="Alternar tema"
-    >
-        {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
-    </button>
-);
+    return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+};
+
+const GlobalMessageProvider = ({ children }) => {
+    const [message, setMessage] = useState(null);
+    return (
+        <GlobalMessageContext.Provider value={{ message, setMessage }}>
+            {children}
+        </GlobalMessageContext.Provider>
+    );
+};
+
+// --- Custom Hooks for Contexts ---
+const useThemeContext = () => useContext(ThemeContext);
+const useAuthContext = () => useContext(AuthContext);
+const useGlobalMessage = () => useContext(GlobalMessageContext);
+
+
+// --- ///////////////////////////////////////////// ---
+// --- /src/components/common/ (Simulados)          ---
+// --- ///////////////////////////////////////////// ---
+
+const ThemeToggleButton = () => {
+    const { theme, toggleTheme } = useThemeContext();
+    return (
+        <button
+            onClick={toggleTheme}
+            className="p-2 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors"
+            aria-label="Alternar tema"
+        >
+            {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
+        </button>
+    );
+};
 
 const LoadingScreen = () => (
     <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-slate-900">
@@ -189,7 +229,9 @@ const LoadingScreen = () => (
     </div>
 );
 
-const GlobalMessageContainer = ({ message, setMessage }) => {
+const GlobalMessageContainer = () => {
+    const { message, setMessage } = useGlobalMessage();
+
     useEffect(() => {
         if (message) {
             const timer = setTimeout(() => setMessage(null), 5000);
@@ -233,8 +275,8 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isLoad
                 <div className="flex justify-end space-x-3 mt-6">
                     <button onClick={onCancel} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 dark:bg-slate-700 dark:text-gray-200 dark:hover:bg-slate-600 transition">Cancelar</button>
                     <button onClick={onConfirm} disabled={isLoading} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:bg-red-400 flex items-center">
-                         {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                         Confirmar
+                        {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Confirmar
                     </button>
                 </div>
             </div>
@@ -262,7 +304,63 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     );
 };
 
+
+// --- ///////////////////////////////////////////// ---
+// --- /src/components/auth/LoginScreen.js (Simulado) ---
+// --- ///////////////////////////////////////////// ---
+
+const LoginScreen = () => {
+    const { handleLogin } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const { theme, toggleTheme } = useThemeContext();
+    const [email, setEmail] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const onLogin = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await handleLogin(email, password);
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Falha no Login', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <div className="absolute top-4 right-4 flex items-center space-x-2">
+                <ThemeToggleButton />
+                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="logo" style={{ width: '70px', height: '70px' }} />
+            </div>
+            <h2 className="text-2xl font-bold text-center mb-6 dark:text-gray-100">Acesso ao Ponto</h2>
+            <form onSubmit={onLogin} className="space-y-4">
+                 <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                 <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                 <button type="submit" disabled={loading} className="w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 disabled:bg-blue-400 flex justify-center items-center">
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Entrar'}
+                 </button>
+            </form>
+             <div className="mt-4 text-center text-sm">
+                <button className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">Esqueceu a Senha?</button>
+            </div>
+             <div className="mt-6 pt-4 border-t dark:border-slate-700">
+                <h3 className="text-sm font-semibold mb-2 dark:text-gray-300">Contas de Demonstração (Senha: 123)</h3>
+                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
+                    <li><span className="font-semibold">RH/Admin:</span> rh@edu.br</li>
+                    <li><span className="font-semibold">Gestor:</span> gestor@edu.br</li>
+                    <li><span className="font-semibold">Servidor:</span> servidor@edu.br</li>
+                </ul>
+            </div>
+        </div>
+    );
+};
+
+
 // --- Funções de Formatação ---
+// ... (Estas funções poderiam ir para um arquivo /src/utils/formatters.js)
 const formatTime = (timestamp) => {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -283,8 +381,12 @@ const formatDuration = (ms) => {
     return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
-// --- Componente unificado para Solicitações ---
-const SolicitationModal = ({ user, db, isOpen, onClose, setGlobalMessage }) => {
+// --- /////////////////////////////////////////////////////////// ---
+// --- /src/components/servidor/SolicitationModal.js (Simulado)  ---
+// --- /////////////////////////////////////////////////////////// ---
+const SolicitationModal = ({ isOpen, onClose }) => {
+    const { user, db } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [formData, setFormData] = useState({
         tipo: 'abono',
         dataOcorrencia: new Date().toISOString().split('T')[0],
@@ -342,7 +444,7 @@ const SolicitationModal = ({ user, db, isOpen, onClose, setGlobalMessage }) => {
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
                 <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
                     <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Nova Solicitação de Ponto</h3>
@@ -379,8 +481,15 @@ const SolicitationModal = ({ user, db, isOpen, onClose, setGlobalMessage }) => {
     );
 };
 
-// --- DASHBOARDS ---
-const ServidorDashboard = ({ user, userId, db, handleLogout, setGlobalMessage, unidades, theme, toggleTheme }) => {
+
+// --- /////////////////////////////////////////////////////////// ---
+// --- /src/components/dashboards/ServidorDashboard.js (Simulado) ---
+// --- /////////////////////////////////////////////////////////// ---
+const ServidorDashboard = () => {
+    const { user, userId, db, handleLogout, unidades } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const { theme, toggleTheme } = useThemeContext();
+
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
     const [clockInLoading, setClockInLoading] = useState(false);
@@ -389,7 +498,6 @@ const ServidorDashboard = ({ user, userId, db, handleLogout, setGlobalMessage, u
 
     const pointCollectionPath = useMemo(() => `/artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `/artifacts/${appId}/public/data/solicitacoes`, []);
-
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
     useEffect(() => {
@@ -502,7 +610,7 @@ const ServidorDashboard = ({ user, userId, db, handleLogout, setGlobalMessage, u
                         </p>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
+                        <ThemeToggleButton />
                         <button
                             onClick={handleLogout}
                             className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
@@ -574,13 +682,21 @@ const ServidorDashboard = ({ user, userId, db, handleLogout, setGlobalMessage, u
                    </div>
                 </section>
 
-                 <SolicitationModal user={user} db={db} isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} setGlobalMessage={setGlobalMessage} />
+                 <SolicitationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
             </div>
         </div>
     );
 };
 
-const GestorDashboard = ({ user, handleLogout, db, setGlobalMessage, unidades, theme, toggleTheme }) => {
+
+// --- ///////////////////////////////////////////////////////// ---
+// --- /src/components/dashboards/GestorDashboard.js (Simulado) ---
+// --- ///////////////////////////////////////////////////////// ---
+const GestorDashboard = () => {
+    const { user, db, handleLogout, unidades } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const { theme } = useThemeContext();
+
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
@@ -633,7 +749,7 @@ const GestorDashboard = ({ user, handleLogout, db, setGlobalMessage, unidades, t
                         </p>
                     </div>
                     <div className="flex items-center space-x-4">
-                        <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
+                        <ThemeToggleButton />
                         <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
                             <LogOut className="w-4 h-4 mr-1" /> Sair
                         </button>
@@ -696,41 +812,12 @@ const GestorDashboard = ({ user, handleLogout, db, setGlobalMessage, unidades, t
     );
 };
 
-const RHAdminDashboard = ({ user, handleLogout, db, setGlobalMessage, unidades, theme, toggleTheme }) => {
-    const [activeTab, setActiveTab] = useState('users');
-    const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
-
-    return (
-        <div className="p-4 sm:p-8">
-            <div className="max-w-6xl mx-auto">
-                 <header className="mb-8 border-b dark:border-slate-700 pb-4 flex justify-between items-center">
-                    <div>
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-500" /> Painel de Administração (RH)</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Perfil: {roleMap[user.role]}.</p>
-                    </div>
-                     <div className="flex items-center space-x-4">
-                        <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
-                        <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><LogOut className="w-4 h-4 mr-1" /> Sair</button>
-                    </div>
-                </header>
-
-                <div className="flex border-b mb-6 dark:border-slate-700">
-                    <button onClick={() => setActiveTab('users')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'users' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4 mr-2" /> Gestão de Usuários</button>
-                    <button onClick={() => setActiveTab('units')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'units' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Home className="w-4 h-4 mr-2" /> Gestão de Unidades</button>
-                    <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><MessageSquare className="w-4 h-4 mr-2" /> Caixa de Mensagens</button>
-                </div>
-
-                {activeTab === 'users' && <UserManagement db={db} appId={appId} setGlobalMessage={setGlobalMessage} unidades={unidades} />}
-                {activeTab === 'units' && <UnitManagement db={db} appId={appId} setGlobalMessage={setGlobalMessage} />}
-                {activeTab === 'messages' && <MessageBoxForAllUsers db={db} appId={appId} currentUser={user} setGlobalMessage={setGlobalMessage} />}
-            </div>
-        </div>
-    );
-};
-
-
-// --- Componentes CRUD ---
-const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
+// --- //////////////////////////////////////////////////////// ---
+// --- /src/components/admin/UserManagement.js (Simulado)     ---
+// --- //////////////////////////////////////////////////////// ---
+const UserManagement = () => {
+    const { db, unidades } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -742,7 +829,7 @@ const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setUsers(Object.entries(DUMMY_ACCOUNTS).map(([id, data]) => ({ id, ...data, matricula: id })));
+            setUsers(Object.entries(DUMMY_ACCOUNTS).map(([email, data]) => ({ id: data.matricula, email, ...data })));
             setLoading(false);
             return;
         };
@@ -795,7 +882,6 @@ const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
     };
 
     const filteredUsers = users.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
-
     const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
@@ -803,7 +889,6 @@ const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
             <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center">
                 <Users className="w-5 h-5 mr-2 text-blue-500" /> Gestão de Usuários
             </h3>
-
             <div className="relative w-full mb-4">
                 <input
                     type="text"
@@ -814,7 +899,6 @@ const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
                 />
                 <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
             </div>
-
              {loading ? (
                 <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div>
             ) : (
@@ -847,7 +931,6 @@ const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
                     </table>
                 </div>
             )}
-
             {editingUser && (
                  <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
                      <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg">
@@ -890,49 +973,30 @@ const UserManagement = ({ db, appId, setGlobalMessage, unidades }) => {
                      </div>
                  </div>
             )}
-
-            <ConfirmationModal
-                isOpen={!!userToDelete}
-                title="Confirmar Exclusão"
-                message={`Deseja realmente excluir o usuário ${userToDelete?.nome}? Esta ação é irreversível.`}
-                onConfirm={handleDeleteUser}
-                onCancel={() => setUserToDelete(null)}
-                isLoading={isSubmitting}
-            />
+            <ConfirmationModal isOpen={!!userToDelete} title="Confirmar Exclusão" message={`Deseja realmente excluir o usuário ${userToDelete?.nome}? Esta ação é irreversível.`} onConfirm={handleDeleteUser} onCancel={() => setUserToDelete(null)} isLoading={isSubmitting} />
         </div>
     );
 };
 
+// --- ////////////////////////////////////////////////////// ---
+// --- /src/components/admin/UnitManagement.js (Simulado)   ---
+// --- ////////////////////////////////////////////////////// ---
 const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading }) => {
     if (!isOpen) return null;
-
-    const handleChange = (e) => {
-        setUnit({ ...unit, [e.target.name]: e.target.value });
-    };
-
+    const handleChange = (e) => setUnit({ ...unit, [e.target.name]: e.target.value });
     return (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md">
-                 <div className="p-6 border-b dark:border-slate-700">
-                     <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">{unit.id ? 'Editar Unidade' : 'Adicionar Unidade'}</h3>
-                 </div>
+                 <div className="p-6 border-b dark:border-slate-700"><h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">{unit.id ? 'Editar Unidade' : 'Adicionar Unidade'}</h3></div>
                  <form onSubmit={onSave} className="p-6 space-y-4">
                      <div>
                          <label className="text-sm font-medium dark:text-gray-300">Nome da Unidade</label>
-                         <input
-                            type="text"
-                            name="name"
-                            value={unit.name}
-                            onChange={handleChange}
-                            className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
-                            required
-                         />
+                         <input type="text" name="name" value={unit.name} onChange={handleChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white" required />
                      </div>
                      <div className="flex justify-end space-x-3 pt-4">
                          <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-600 dark:text-gray-200 rounded-lg">Cancelar</button>
                          <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-500 text-white rounded-lg flex items-center disabled:bg-blue-300">
-                             {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin"/>}
-                             Salvar
+                             {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin"/>} Salvar
                          </button>
                      </div>
                  </form>
@@ -941,7 +1005,9 @@ const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading
     );
 }
 
-const UnitManagement = ({ db, appId, setGlobalMessage }) => {
+const UnitManagement = () => {
+    const { db } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [units, setUnits] = useState([]);
     const [loading, setLoading] = useState(true);
     const [unitToEdit, setUnitToEdit] = useState(null);
@@ -951,11 +1017,7 @@ const UnitManagement = ({ db, appId, setGlobalMessage }) => {
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setUnits(Object.entries({
-                'unidade-adm-01': { name: 'Controle e Movimentação' },
-                'unidade-adm-02': { name: 'Núcleo de Logística' },
-                'unidade-esc-01': { name: 'Escola Municipal A' },
-            }).map(([id, data]) => ({id, ...data})))
+            setUnits(Object.entries({'unidade-adm-01': { name: 'Controle e Movimentação' }, 'unidade-esc-01': { name: 'Escola Municipal A' }}).map(([id, data]) => ({id, ...data})));
             setLoading(false);
             return;
         }
@@ -1027,29 +1089,18 @@ const UnitManagement = ({ db, appId, setGlobalMessage }) => {
                     </tbody>
                 </table>
             </div>
-
-            <UnitManagementModal
-                isOpen={!!unitToEdit}
-                onClose={() => setUnitToEdit(null)}
-                onSave={handleSaveUnit}
-                unit={unitToEdit}
-                setUnit={setUnitToEdit}
-                isLoading={isSubmitting}
-            />
-
-            <ConfirmationModal
-                isOpen={!!unitToDelete}
-                title="Confirmar Exclusão"
-                message={`Deseja realmente excluir a unidade "${unitToDelete?.name}"?`}
-                onConfirm={handleDeleteUnit}
-                onCancel={() => setUnitToDelete(null)}
-                isLoading={isSubmitting}
-            />
+            <UnitManagementModal isOpen={!!unitToEdit} onClose={() => setUnitToEdit(null)} onSave={handleSaveUnit} unit={unitToEdit} setUnit={setUnitToEdit} isLoading={isSubmitting} />
+            <ConfirmationModal isOpen={!!unitToDelete} title="Confirmar Exclusão" message={`Deseja realmente excluir a unidade "${unitToDelete?.name}"?`} onConfirm={handleDeleteUnit} onCancel={() => setUnitToDelete(null)} isLoading={isSubmitting}/>
         </div>
     );
 };
 
-const MessageBoxForAllUsers = ({ db, appId, currentUser, setGlobalMessage }) => {
+// --- ////////////////////////////////////////////////////// ---
+// --- /src/components/admin/MessageBox.js (Simulado)       ---
+// --- ////////////////////////////////////////////////////// ---
+const MessageBoxForAllUsers = () => {
+    const { user: currentUser, db } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
     const messagesCollectionPath = `/artifacts/${appId}/public/data/global_messages`;
@@ -1089,100 +1140,85 @@ const MessageBoxForAllUsers = ({ db, appId, currentUser, setGlobalMessage }) => 
     );
 };
 
-// --- Componente de Autenticação ---
-const LoginScreen = ({ setCurrentView, auth, fetchUserProfile, setGlobalMessage, theme, toggleTheme }) => {
-    const [matricula, setMatricula] = useState('');
-    const [password, setPassword] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    const handleLogin = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-
-        const account = DUMMY_ACCOUNTS[matricula];
-        if (!account || account.password !== password) {
-            setGlobalMessage({ type: 'error', title: 'Falha no Login', message: 'Matrícula ou senha incorretos.' });
-            setLoading(false);
-            return;
-        }
-
-        if (!isFirebaseInitialized) { // Modo demonstração sem Firebase
-            await fetchUserProfile(matricula, account.email, account.role, matricula);
-        } else { // Modo com Firebase
-            try {
-                // Simula um login persistente criando um usuário anônimo e atrelando os dados
-                const userCredential = await signInAnonymously(auth);
-                await fetchUserProfile(userCredential.user.uid, account.email, account.role, matricula);
-            } catch (e) {
-                setGlobalMessage({ type: 'error', title: 'Erro de Autenticação', message: e.message });
-            }
-        }
-        setLoading(false);
-    };
+// --- /////////////////////////////////////////////////////////// ---
+// --- /src/components/dashboards/RHAdminDashboard.js (Simulado) ---
+// --- /////////////////////////////////////////////////////////// ---
+const RHAdminDashboard = () => {
+    const { user, handleLogout } = useAuthContext();
+    const [activeTab, setActiveTab] = useState('users');
+    const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
-        <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
-            <div className="absolute top-4 right-4 flex items-center space-x-2">
-                <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
-                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="logo" style={{ width: '70px', height: '70px' }} />
-            </div>
-            <h2 className="text-2xl font-bold text-center mb-6 dark:text-gray-100">Acesso ao Ponto</h2>
-            <form onSubmit={handleLogin} className="space-y-4">
-                 <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                 <input type="password" placeholder="Senha (padrão: 123)" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                 <button type="submit" disabled={loading} className="w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 disabled:bg-blue-400 flex justify-center items-center">
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Entrar'}
-                 </button>
-            </form>
-             <div className="mt-4 text-center text-sm">
-                <button onClick={() => setCurrentView('recover')} className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">Esqueceu a Senha?</button>
-            </div>
-             <div className="mt-6 pt-4 border-t dark:border-slate-700">
-                <h3 className="text-sm font-semibold mb-2 dark:text-gray-300">Contas de Demonstração (Senha: 123)</h3>
-                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                    <li><span className="font-semibold">RH/Admin:</span> 10001</li>
-                    <li><span className="font-semibold">Gestor:</span> 20002</li>
-                    <li><span className="font-semibold">Servidor:</span> 30003</li>
-                </ul>
+        <div className="p-4 sm:p-8">
+            <div className="max-w-6xl mx-auto">
+                 <header className="mb-8 border-b dark:border-slate-700 pb-4 flex justify-between items-center">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-500" /> Painel de Administração (RH)</h1>
+                        <p className="text-gray-500 dark:text-gray-400 mt-1">Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Perfil: {roleMap[user.role]}.</p>
+                    </div>
+                     <div className="flex items-center space-x-4">
+                        <ThemeToggleButton />
+                        <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><LogOut className="w-4 h-4 mr-1" /> Sair</button>
+                    </div>
+                </header>
+
+                <div className="flex border-b mb-6 dark:border-slate-700">
+                    <button onClick={() => setActiveTab('users')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'users' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4 mr-2" /> Gestão de Usuários</button>
+                    <button onClick={() => setActiveTab('units')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'units' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Home className="w-4 h-4 mr-2" /> Gestão de Unidades</button>
+                    <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><MessageSquare className="w-4 h-4 mr-2" /> Caixa de Mensagens</button>
+                </div>
+
+                {activeTab === 'users' && <UserManagement />}
+                {activeTab === 'units' && <UnitManagement />}
+                {activeTab === 'messages' && <MessageBoxForAllUsers />}
             </div>
         </div>
     );
 };
 
-// --- Componente Principal da Aplicação ---
-export default function App() {
-    const { theme, toggleTheme } = useTheme();
-    const { user, role, isAuthReady, isLoading, auth, fetchUserProfile, handleLogout, unidades } = useFirebaseAuthentication();
-    const [currentAuthView, setCurrentView] = useState('login');
-    const [globalMessage, setGlobalMessage] = useState(null);
 
-    if (isLoading || !isAuthReady) {
+// --- ///////////////////////////////////////////// ---
+// --- /src/App.js (Componente Principal)          ---
+// --- ///////////////////////////////////////////// ---
+const AppContent = () => {
+    const { user, role, isLoading } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+
+    if (isLoading) {
         return <LoadingScreen />;
     }
 
     if (!user) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-slate-900 transition-colors duration-300">
-                <GlobalMessageContainer message={globalMessage} setMessage={setGlobalMessage} />
-                {currentAuthView === 'login' && <LoginScreen
-                    setCurrentView={setCurrentView}
-                    auth={auth}
-                    fetchUserProfile={fetchUserProfile}
-                    setGlobalMessage={setGlobalMessage}
-                    theme={theme}
-                    toggleTheme={toggleTheme}
-                />}
-                {/* Outras telas de autenticação podem ser adicionadas aqui */}
+                <LoginScreen />
             </div>
         );
     }
+    
+    const dashboardMap = {
+        servidor: <ServidorDashboard />,
+        gestor: <GestorDashboard />,
+        rh: <RHAdminDashboard />
+    };
 
     return (
         <div className="bg-gray-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
-            <GlobalMessageContainer message={globalMessage} setMessage={setGlobalMessage} />
-            {role === 'servidor' && <ServidorDashboard user={user} userId={user.uid} db={db} handleLogout={handleLogout} setGlobalMessage={setGlobalMessage} unidades={unidades} theme={theme} toggleTheme={toggleTheme} />}
-            {role === 'gestor' && <GestorDashboard user={user} handleLogout={handleLogout} db={db} setGlobalMessage={setGlobalMessage} unidades={unidades} theme={theme} toggleTheme={toggleTheme} />}
-            {role === 'rh' && <RHAdminDashboard user={user} handleLogout={handleLogout} db={db} setGlobalMessage={setGlobalMessage} unidades={unidades} theme={theme} toggleTheme={toggleTheme} />}
+            {dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>}
         </div>
     );
 }
+
+export default function App() {
+    return (
+        <ThemeProvider>
+            <GlobalMessageProvider>
+                <AuthProvider>
+                    <GlobalMessageContainer />
+                    <AppContent />
+                </AuthProvider>
+            </GlobalMessageProvider>
+        </ThemeProvider>
+    );
+}
+
