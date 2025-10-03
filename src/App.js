@@ -4,7 +4,7 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import {
     getFirestore, doc, setDoc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs
 } from 'firebase/firestore';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
@@ -37,10 +37,10 @@ try {
 
 // --- Dados de Demonstração ---
 const DUMMY_ACCOUNTS = {
-    'rh@edu.br': { password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01', matricula: '10001' },
-    'gestor@edu.br': { password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01', matricula: '20002' },
-    'servidor@edu.br': { password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01', matricula: '30003' },
-    'estagiario@edu.br': { password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01', matricula: '40004' }
+    'rh@edu.br': { email: 'rh@edu.br', password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01', matricula: '10001' },
+    'gestor@edu.br': { email: 'gestor@edu.br', password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01', matricula: '20002' },
+    'servidor@edu.br': { email: 'servidor@edu.br', password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01', matricula: '30003' },
+    'estagiario@edu.br': { email: 'estagiario@edu.br', password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01', matricula: '40004' }
 };
 
 // --- Constantes ---
@@ -146,26 +146,50 @@ const AuthProvider = ({ children }) => {
         });
         return () => unsubscribe();
     }, []);
+    
+    const handleLogin = useCallback(async (matricula, password) => {
+        // Prioritize checking demo accounts, as the user might be using them
+        // even in an environment where Firebase is technically initialized.
+        const demoAccount = Object.values(DUMMY_ACCOUNTS).find(acc => acc.matricula === matricula);
+        if (demoAccount && demoAccount.password === password) {
+            setUser({ uid: demoAccount.matricula, ...demoAccount });
+            return; // Successful demo login, so we exit.
+        }
 
-    const handleLogin = useCallback(async (email, password) => {
-        if (!isFirebaseInitialized) { // Modo Demo
-            const account = DUMMY_ACCOUNTS[email.toLowerCase()];
-            if (account && account.password === password) {
-                setUser({ uid: account.matricula, ...account });
-                return;
-            }
+        // If it's not a demo account, proceed with Firebase login.
+        if (!isFirebaseInitialized) {
+            // If Firebase isn't set up and it wasn't a demo account, then it's an error.
             throw new Error('Matrícula ou senha incorretos.');
         }
 
-        // Modo Firebase
-        const userCredential = await signInWithEmailAndPassword(auth, email, password);
-        const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, userCredential.user.uid);
-        const userSnap = await getDoc(userDocRef);
-        if (!userSnap.exists()) {
-            throw new Error("Perfil de usuário não encontrado no banco de dados.");
-        }
-        setUser({ uid: userCredential.user.uid, ...userSnap.data() });
+        // Modo Firebase for real users
+        try {
+            const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
+            const q = query(usersRef, where("matricula", "==", matricula));
+            const querySnapshot = await getDocs(q);
+    
+            if (querySnapshot.empty) {
+                throw new Error("Matrícula ou senha incorretos.");
+            }
+    
+            const userDoc = querySnapshot.docs[0];
+            const userData = userDoc.data();
+            // Assumimos que o email está salvo no documento do usuário
+            const userEmail = userData.email; 
+    
+            if (!userEmail) {
+                console.error("O documento do usuário não possui o campo de email:", userDoc.id);
+                throw new Error("Falha no login. O perfil do usuário está incompleto.");
+            }
+    
+            // signInWithEmailAndPassword will trigger onAuthStateChanged, which handles setting the user.
+            await signInWithEmailAndPassword(auth, userEmail, password);
 
+        } catch(error) {
+             // Avoid showing specific Firebase errors to the user for security.
+             console.error("Firebase login failed:", error);
+             throw new Error("Matrícula ou senha incorretos.");
+        }
     }, []);
 
     const handleLogout = useCallback(async () => {
@@ -206,7 +230,7 @@ const useGlobalMessage = () => useContext(GlobalMessageContext);
 
 
 // --- ///////////////////////////////////////////// ---
-// --- /src/components/common/ (Simulados)          ---
+// --- /src/components/common/ (Simulados)           ---
 // --- ///////////////////////////////////////////// ---
 
 const ThemeToggleButton = () => {
@@ -313,7 +337,7 @@ const LoginScreen = () => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const { theme, toggleTheme } = useThemeContext();
-    const [email, setEmail] = useState('');
+    const [matricula, setMatricula] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -321,7 +345,7 @@ const LoginScreen = () => {
         e.preventDefault();
         setLoading(true);
         try {
-            await handleLogin(email, password);
+            await handleLogin(matricula, password);
         } catch (error) {
             setGlobalMessage({ type: 'error', title: 'Falha no Login', message: error.message });
         } finally {
@@ -331,13 +355,15 @@ const LoginScreen = () => {
 
     return (
         <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
-            <div className="absolute top-4 right-4 flex items-center space-x-2">
+            <div className="absolute top-4 right-4">
                 <ThemeToggleButton />
-                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="logo" style={{ width: '70px', height: '70px' }} />
             </div>
-            <h2 className="text-2xl font-bold text-center mb-6 dark:text-gray-100">Acesso ao Ponto</h2>
+            <div className="flex flex-col items-center mb-6">
+                 <h2 className="text-2xl font-bold dark:text-gray-100">Acesso ao Ponto</h2>
+                 <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="logo mt-4" style={{ width: '70px', height: '70px' }} />
+            </div>
             <form onSubmit={onLogin} className="space-y-4">
-                 <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
+                 <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                  <button type="submit" disabled={loading} className="w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 disabled:bg-blue-400 flex justify-center items-center">
                     {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Entrar'}
@@ -349,9 +375,9 @@ const LoginScreen = () => {
              <div className="mt-6 pt-4 border-t dark:border-slate-700">
                 <h3 className="text-sm font-semibold mb-2 dark:text-gray-300">Contas de Demonstração (Senha: 123)</h3>
                 <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                    <li><span className="font-semibold">RH/Admin:</span> rh@edu.br</li>
-                    <li><span className="font-semibold">Gestor:</span> gestor@edu.br</li>
-                    <li><span className="font-semibold">Servidor:</span> servidor@edu.br</li>
+                    <li><span className="font-semibold">RH/Admin:</span> 10001</li>
+                    <li><span className="font-semibold">Gestor:</span> 20002</li>
+                    <li><span className="font-semibold">Servidor:</span> 30003</li>
                 </ul>
             </div>
         </div>
@@ -444,7 +470,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     return (
-         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+       <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
             <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
                 <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
                     <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Nova Solicitação de Ponto</h3>
@@ -900,9 +926,9 @@ const UserManagement = () => {
                 <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
             </div>
              {loading ? (
-                <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div>
+                 <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div>
             ) : (
-                <div className="overflow-x-auto">
+                 <div className="overflow-x-auto">
                      <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
                          <thead className="bg-gray-50 dark:bg-slate-900/50">
                             <tr>
@@ -979,7 +1005,7 @@ const UserManagement = () => {
 };
 
 // --- ////////////////////////////////////////////////////// ---
-// --- /src/components/admin/UnitManagement.js (Simulado)   ---
+// --- /src/components/admin/UnitManagement.js (Simulado)     ---
 // --- ////////////////////////////////////////////////////// ---
 const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading }) => {
     if (!isOpen) return null;
@@ -1096,7 +1122,7 @@ const UnitManagement = () => {
 };
 
 // --- ////////////////////////////////////////////////////// ---
-// --- /src/components/admin/MessageBox.js (Simulado)       ---
+// --- /src/components/admin/MessageBox.js (Simulado)         ---
 // --- ////////////////////////////////////////////////////// ---
 const MessageBoxForAllUsers = () => {
     const { user: currentUser, db } = useAuthContext();
@@ -1178,7 +1204,7 @@ const RHAdminDashboard = () => {
 
 
 // --- ///////////////////////////////////////////// ---
-// --- /src/App.js (Componente Principal)          ---
+// --- /src/App.js (Componente Principal)            ---
 // --- ///////////////////////////////////////////// ---
 const AppContent = () => {
     const { user, role, isLoading } = useAuthContext();
@@ -1221,4 +1247,5 @@ export default function App() {
         </ThemeProvider>
     );
 }
+
 
