@@ -1090,7 +1090,7 @@ const MessageBoxForAllUsers = ({ db, appId, currentUser, setGlobalMessage }) => 
 };
 
 // --- Componente de Autenticação ---
-const LoginScreen = ({ setCurrentView, auth, fetchUserProfile, setGlobalMessage }) => {
+const LoginScreen = ({ setCurrentView, auth, fetchUserProfile, setGlobalMessage, theme, toggleTheme }) => {
     const [matricula, setMatricula] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -1121,7 +1121,10 @@ const LoginScreen = ({ setCurrentView, auth, fetchUserProfile, setGlobalMessage 
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+            <div className="absolute top-4 right-4">
+                <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
+            </div>
             <h2 className="text-2xl font-bold text-center mb-6 dark:text-gray-100">Acesso ao Ponto</h2>
             <form onSubmit={handleLogin} className="space-y-4">
                  <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
@@ -1158,16 +1161,15 @@ export default function App() {
 
     if (!user) {
         return (
-            <div className="relative flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-slate-900 transition-colors duration-300">
-                <div className="absolute top-5 right-5 z-10">
-                    <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
-                </div>
+            <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-slate-900 transition-colors duration-300">
                 <GlobalMessageContainer message={globalMessage} setMessage={setGlobalMessage} />
                 {currentAuthView === 'login' && <LoginScreen
                     setCurrentView={setCurrentView}
                     auth={auth}
                     fetchUserProfile={fetchUserProfile}
                     setGlobalMessage={setGlobalMessage}
+                    theme={theme}
+                    toggleTheme={toggleTheme}
                 />}
                 {/* Outras telas de autenticação podem ser adicionadas aqui */}
             </div>
@@ -1183,3 +1185,4 @@ export default function App() {
         </div>
     );
 }
+
