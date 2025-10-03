@@ -1122,9 +1122,9 @@ const LoginScreen = ({ setCurrentView, auth, fetchUserProfile, setGlobalMessage,
 
     return (
         <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
-            <div className="absolute top-4 right-4">
+            <div className="absolute top-4 right-4 flex items-center space-x-2">
                 <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
-                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" class="logo" style="width: 70px; height: 70px;">
+                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="logo" style={{ width: '70px', height: '70px' }} />
             </div>
             <h2 className="text-2xl font-bold text-center mb-6 dark:text-gray-100">Acesso ao Ponto</h2>
             <form onSubmit={handleLogin} className="space-y-4">
@@ -1186,4 +1186,3 @@ export default function App() {
         </div>
     );
 }
-
