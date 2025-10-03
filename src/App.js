@@ -1124,6 +1124,7 @@ const LoginScreen = ({ setCurrentView, auth, fetchUserProfile, setGlobalMessage,
         <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
             <div className="absolute top-4 right-4">
                 <ThemeToggleButton theme={theme} toggleTheme={toggleTheme} />
+                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" class="logo" style="width: 70px; height: 70px;">
             </div>
             <h2 className="text-2xl font-bold text-center mb-6 dark:text-gray-100">Acesso ao Ponto</h2>
             <form onSubmit={handleLogin} className="space-y-4">
