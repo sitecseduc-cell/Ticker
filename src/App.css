@@ -1,3 +1,21 @@
+/* 1. Definição das Variáveis de Tema */
+
+/* Tema Claro (Padrão) */
+:root {
+  --app-header-background: #f0f2f5; /* Um cinza claro para o fundo */
+  --app-header-text: #202124;      /* Um texto escuro */
+  --app-link-color: #1a73e8;       /* Um azul padrão para links */
+}
+
+/* Tema Escuro (quando a classe 'dark' é aplicada ao HTML) */
+html.dark {
+  --app-header-background: #282c34; /* Cor original do seu CSS */
+  --app-header-text: white;         /* Cor original do seu CSS */
+  --app-link-color: #61dafb;        /* Cor original do seu CSS */
+}
+
+/* 2. Aplicação das Variáveis e Estilos Antigos */
+
 .App {
   text-align: center;
 }
@@ -14,18 +32,25 @@
 }
 
 .App-header {
-  background-color: #282c34;
+  /* Cores fixas removidas e substituídas por variáveis */
+  background-color: var(--app-header-background);
+  color: var(--app-header-text);
+
+  /* Propriedades originais mantidas */
   min-height: 100vh;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   font-size: calc(10px + 2vmin);
-  color: white;
+
+  /* Bônus: adiciona uma transição suave ao trocar de tema */
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
 .App-link {
-  color: #61dafb;
+  /* Cor fixa substituída por variável */
+  color: var(--app-link-color);
 }
 
 @keyframes App-logo-spin {
