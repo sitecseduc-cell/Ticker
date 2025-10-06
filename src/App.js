@@ -135,7 +135,6 @@ const AuthProvider = ({ children }) => {
                 if (userSnap.exists()) {
                     setUser({ uid: firebaseUser.uid, ...userSnap.data() });
                 } else {
-                    // Se o usuário existe no Auth mas não no Firestore (caso raro), desloga.
                     await signOut(auth);
                     setUser(null);
                 }
@@ -148,21 +147,16 @@ const AuthProvider = ({ children }) => {
     }, []);
     
     const handleLogin = useCallback(async (matricula, password) => {
-        // Prioritize checking demo accounts, as the user might be using them
-        // even in an environment where Firebase is technically initialized.
         const demoAccount = Object.values(DUMMY_ACCOUNTS).find(acc => acc.matricula === matricula);
         if (demoAccount && demoAccount.password === password) {
             setUser({ uid: demoAccount.matricula, ...demoAccount });
-            return; // Successful demo login, so we exit.
+            return;
         }
 
-        // If it's not a demo account, proceed with Firebase login.
         if (!isFirebaseInitialized) {
-            // If Firebase isn't set up and it wasn't a demo account, then it's an error.
             throw new Error('Matrícula ou senha incorretos.');
         }
 
-        // Modo Firebase for real users
         try {
             const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
@@ -174,7 +168,6 @@ const AuthProvider = ({ children }) => {
     
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
-            // Assumimos que o email está salvo no documento do usuário
             const userEmail = userData.email; 
     
             if (!userEmail) {
@@ -182,11 +175,9 @@ const AuthProvider = ({ children }) => {
                 throw new Error("Falha no login. O perfil do usuário está incompleto.");
             }
     
-            // signInWithEmailAndPassword will trigger onAuthStateChanged, which handles setting the user.
             await signInWithEmailAndPassword(auth, userEmail, password);
 
         } catch(error) {
-             // Avoid showing specific Firebase errors to the user for security.
              console.error("Firebase login failed:", error);
              throw new Error("Matrícula ou senha incorretos.");
         }
@@ -207,8 +198,8 @@ const AuthProvider = ({ children }) => {
         unidades,
         handleLogin,
         handleLogout,
-        db, // Apenas para componentes que ainda não foram totalmente refatorados
-        auth // Apenas para componentes que ainda não foram totalmente refatorados
+        db,
+        auth
     }), [user, isLoading, unidades, handleLogin, handleLogout]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -229,10 +220,7 @@ const useAuthContext = () => useContext(AuthContext);
 const useGlobalMessage = () => useContext(GlobalMessageContext);
 
 
-// --- ///////////////////////////////////////////// ---
-// --- /src/components/common/ (Simulados)           ---
-// --- ///////////////////////////////////////////// ---
-
+// --- Components ---
 const ThemeToggleButton = () => {
     const { theme, toggleTheme } = useThemeContext();
     return (
@@ -255,7 +243,6 @@ const LoadingScreen = () => (
 
 const GlobalMessageContainer = () => {
     const { message, setMessage } = useGlobalMessage();
-
     useEffect(() => {
         if (message) {
             const timer = setTimeout(() => setMessage(null), 5000);
@@ -328,15 +315,9 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     );
 };
 
-
-// --- ///////////////////////////////////////////// ---
-// --- /src/components/auth/LoginScreen.js (Simulado) ---
-// --- ///////////////////////////////////////////// ---
-
 const LoginScreen = () => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const { theme, toggleTheme } = useThemeContext();
     const [matricula, setMatricula] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -384,9 +365,6 @@ const LoginScreen = () => {
     );
 };
 
-
-// --- Funções de Formatação ---
-// ... (Estas funções poderiam ir para um arquivo /src/utils/formatters.js)
 const formatTime = (timestamp) => {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -407,9 +385,6 @@ const formatDuration = (ms) => {
     return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
-// --- /////////////////////////////////////////////////////////// ---
-// --- /src/components/servidor/SolicitationModal.js (Simulado)  ---
-// --- /////////////////////////////////////////////////////////// ---
 const SolicitationModal = ({ isOpen, onClose }) => {
     const { user, db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -507,15 +482,9 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
-
-// --- /////////////////////////////////////////////////////////// ---
-// --- /src/components/dashboards/ServidorDashboard.js (Simulado) ---
-// --- /////////////////////////////////////////////////////////// ---
 const ServidorDashboard = () => {
     const { user, userId, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const { theme, toggleTheme } = useThemeContext();
-
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
     const [clockInLoading, setClockInLoading] = useState(false);
@@ -714,15 +683,9 @@ const ServidorDashboard = () => {
     );
 };
 
-
-// --- ///////////////////////////////////////////////////////// ---
-// --- /src/components/dashboards/GestorDashboard.js (Simulado) ---
-// --- ///////////////////////////////////////////////////////// ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const { theme } = useThemeContext();
-
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
@@ -838,9 +801,6 @@ const GestorDashboard = () => {
     );
 };
 
-// --- //////////////////////////////////////////////////////// ---
-// --- /src/components/admin/UserManagement.js (Simulado)     ---
-// --- //////////////////////////////////////////////////////// ---
 const UserManagement = () => {
     const { db, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1004,9 +964,6 @@ const UserManagement = () => {
     );
 };
 
-// --- ////////////////////////////////////////////////////// ---
-// --- /src/components/admin/UnitManagement.js (Simulado)     ---
-// --- ////////////////////////////////////////////////////// ---
 const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading }) => {
     if (!isOpen) return null;
     const handleChange = (e) => setUnit({ ...unit, [e.target.name]: e.target.value });
@@ -1121,9 +1078,6 @@ const UnitManagement = () => {
     );
 };
 
-// --- ////////////////////////////////////////////////////// ---
-// --- /src/components/admin/MessageBox.js (Simulado)         ---
-// --- ////////////////////////////////////////////////////// ---
 const MessageBoxForAllUsers = () => {
     const { user: currentUser, db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1166,9 +1120,6 @@ const MessageBoxForAllUsers = () => {
     );
 };
 
-// --- /////////////////////////////////////////////////////////// ---
-// --- /src/components/dashboards/RHAdminDashboard.js (Simulado) ---
-// --- /////////////////////////////////////////////////////////// ---
 const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
@@ -1202,37 +1153,21 @@ const RHAdminDashboard = () => {
     );
 };
 
-// --- ///////////////////////////////////////////// ---
-// --- Componente de Rodapé                          ---
-// --- ///////////////////////////////////////////// ---
 const Footer = () => {
     return (
         <footer className="w-full py-4 mt-auto text-center bg-gray-100 dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800">
             <p className="text-xs text-gray-500 dark:text-gray-400">
-                © Criado por ISAAC.J.S.B | Desenvolvido por GIULIANO.L & HENRIQUE.B
+                2025 todos os direitos reservados
             </p>
         </footer>
     );
 };
 
-
-// --- ///////////////////////////////////////////// ---
-// --- /src/App.js (Componente Principal)            ---
-// --- ///////////////////////////////////////////// ---
 const AppContent = () => {
     const { user, role, isLoading } = useAuthContext();
-    const { setMessage: setGlobalMessage } = useGlobalMessage();
 
     if (isLoading) {
         return <LoadingScreen />;
-    }
-
-    if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-slate-900 transition-colors duration-300">
-                <LoginScreen />
-            </div>
-        );
     }
     
     const dashboardMap = {
@@ -1242,8 +1177,15 @@ const AppContent = () => {
     };
 
     return (
-        <div className="bg-gray-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
-            {dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>}
+        <div className="flex flex-col min-h-screen bg-gray-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200">
+            <main className={`flex-grow ${!user ? 'flex items-center justify-center p-4' : ''}`}>
+                {!user ? (
+                    <LoginScreen />
+                ) : (
+                    dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
+                )}
+            </main>
+            <Footer />
         </div>
     );
 }
@@ -1260,5 +1202,4 @@ export default function App() {
         </ThemeProvider>
     );
 }
-
 
