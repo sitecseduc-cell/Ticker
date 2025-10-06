@@ -1202,6 +1202,19 @@ const RHAdminDashboard = () => {
     );
 };
 
+// --- ///////////////////////////////////////////// ---
+// --- Componente de Rodapé                          ---
+// --- ///////////////////////////////////////////// ---
+const Footer = () => {
+    return (
+        <footer className="w-full py-4 mt-auto text-center bg-gray-100 dark:bg-slate-900 border-t border-gray-200 dark:border-slate-800">
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+                © Criado por ISAAC.J.S.B | Desenvolvido por GIULIANO.L & HENRIQUE.B
+            </p>
+        </footer>
+    );
+};
+
 
 // --- ///////////////////////////////////////////// ---
 // --- /src/App.js (Componente Principal)            ---
