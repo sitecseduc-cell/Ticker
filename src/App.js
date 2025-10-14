@@ -35,13 +35,12 @@ try {
     app = {}; auth = {}; db = null;
 }
 
-// --- CORREÇÃO 2: Reestruturado DUMMY_ACCOUNTS para usar matrícula como chave ---
-// Isso simplifica a lógica de login no modo de demonstração.
+// --- Dados de Demonstração ---
 const DUMMY_ACCOUNTS = {
-    '10001': { email: 'rh@edu.br', password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01', matricula: '10001' },
-    '20002': { email: 'gestor@edu.br', password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01', matricula: '20002' },
-    '30003': { email: 'servidor@edu.br', password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01', matricula: '30003' },
-    '40004': { email: 'estagiario@edu.br', password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01', matricula: '40004' }
+    'rh@edu.br': { email: 'rh@edu.br', password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01', matricula: '10001' },
+    'gestor@edu.br': { email: 'gestor@edu.br', password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01', matricula: '20002' },
+    'servidor@edu.br': { email: 'servidor@edu.br', password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01', matricula: '30003' },
+    'estagiario@edu.br': { email: 'estagiario@edu.br', password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01', matricula: '40004' }
 };
 
 // --- Constantes ---
@@ -113,7 +112,6 @@ const AuthProvider = ({ children }) => {
             });
             return;
         }
-        // --- CORREÇÃO 3: Padronizado o caminho para ser consistente com UnitManagement ---
         const q = query(collection(db, `/artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const units = {};
@@ -137,6 +135,7 @@ const AuthProvider = ({ children }) => {
                 if (userSnap.exists()) {
                     setUser({ uid: firebaseUser.uid, ...userSnap.data() });
                 } else {
+                    // Se o usuário existe no Auth mas não no Firestore (caso raro), desloga.
                     await signOut(auth);
                     setUser(null);
                 }
@@ -149,17 +148,21 @@ const AuthProvider = ({ children }) => {
     }, []);
 
     const handleLogin = useCallback(async (matricula, password) => {
-        // --- CORREÇÃO 2: Lógica de login demo simplificada ---
-        const demoAccount = DUMMY_ACCOUNTS[matricula];
+        // Prioritize checking demo accounts, as the user might be using them
+        // even in an environment where Firebase is technically initialized.
+        const demoAccount = Object.values(DUMMY_ACCOUNTS).find(acc => acc.matricula === matricula);
         if (demoAccount && demoAccount.password === password) {
             setUser({ uid: demoAccount.matricula, ...demoAccount });
-            return;
+            return; // Successful demo login, so we exit.
         }
 
+        // If it's not a demo account, proceed with Firebase login.
         if (!isFirebaseInitialized) {
+            // If Firebase isn't set up and it wasn't a demo account, then it's an error.
             throw new Error('Matrícula ou senha incorretos.');
         }
 
+        // Modo Firebase for real users
         try {
             const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
@@ -171,15 +174,19 @@ const AuthProvider = ({ children }) => {
 
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
+            // Assumimos que o email está salvo no documento do usuário
             const userEmail = userData.email;
 
             if (!userEmail) {
                 console.error("O documento do usuário não possui o campo de email:", userDoc.id);
                 throw new Error("Falha no login. O perfil do usuário está incompleto.");
             }
+
+            // signInWithEmailAndPassword will trigger onAuthStateChanged, which handles setting the user.
             await signInWithEmailAndPassword(auth, userEmail, password);
 
         } catch(error) {
+             // Avoid showing specific Firebase errors to the user for security.
              console.error("Firebase login failed:", error);
              throw new Error("Matrícula ou senha incorretos.");
         }
@@ -200,8 +207,8 @@ const AuthProvider = ({ children }) => {
         unidades,
         handleLogin,
         handleLogout,
-        db,
-        auth
+        db, // Apenas para componentes que ainda não foram totalmente refatorados
+        auth // Apenas para componentes que ainda não foram totalmente refatorados
     }), [user, isLoading, unidades, handleLogin, handleLogout]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -359,19 +366,19 @@ const LoginScreen = () => {
                  <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
                  <button type="submit" disabled={loading} className="w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 disabled:bg-blue-400 flex justify-center items-center">
-                     {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Entrar'}
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Entrar'}
                  </button>
             </form>
              <div className="mt-4 text-center text-sm">
-                 <button className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">Esqueceu a Senha?</button>
+                <button className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">Esqueceu a Senha?</button>
             </div>
              <div className="mt-6 pt-4 border-t dark:border-slate-700">
-                 <h3 className="text-sm font-semibold mb-2 dark:text-gray-300">Contas de Demonstração (Senha: 123)</h3>
-                 <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                     <li><span className="font-semibold">RH/Admin:</span> 10001</li>
-                     <li><span className="font-semibold">Gestor:</span> 20002</li>
-                     <li><span className="font-semibold">Servidor:</span> 30003</li>
-                 </ul>
+                <h3 className="text-sm font-semibold mb-2 dark:text-gray-300">Contas de Demonstração (Senha: 123)</h3>
+                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
+                    <li><span className="font-semibold">RH/Admin:</span> 10001</li>
+                    <li><span className="font-semibold">Gestor:</span> 20002</li>
+                    <li><span className="font-semibold">Servidor:</span> 30003</li>
+                </ul>
             </div>
         </div>
     );
@@ -514,13 +521,6 @@ const ServidorDashboard = () => {
     const [clockInLoading, setClockInLoading] = useState(false);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
-    
-    // Hook para forçar a atualização do componente a cada minuto para o relógio em tempo real
-    const [, setTick] = useState(0);
-    useEffect(() => {
-        const timer = setInterval(() => setTick(tick => tick + 1), 60000); // Atualiza a cada 60 segundos
-        return () => clearInterval(timer);
-    }, []);
 
     const pointCollectionPath = useMemo(() => `/artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `/artifacts/${appId}/public/data/solicitacoes`, []);
@@ -553,12 +553,10 @@ const ServidorDashboard = () => {
             }
             summary[dateKey].points.push(point);
         });
-        
         Object.keys(summary).forEach(dateKey => {
             const day = summary[dateKey];
             let totalWorkedMs = 0;
             let currentSegmentStart = null;
-            
             day.points.forEach(p => {
                 const type = p.tipo;
                 const timestamp = p.timestamp.toDate().getTime();
@@ -569,25 +567,12 @@ const ServidorDashboard = () => {
                     currentSegmentStart = null;
                 }
             });
-
-            // --- CORREÇÃO 1: Cálculo em tempo real se o usuário estiver trabalhando ---
-            // Se o loop terminar e 'currentSegmentStart' ainda tiver um valor, significa que o usuário está "no relógio".
-            // Calculamos o tempo desde o último ponto até agora e adicionamos ao total do dia.
-            if (currentSegmentStart !== null) {
-                const todayKey = formatDateOnly(new Date());
-                // Só calcula em tempo real para o dia de hoje
-                if (dateKey === todayKey) {
-                    totalWorkedMs += (Date.now() - currentSegmentStart);
-                }
-            }
-
             day.totalMs = totalWorkedMs;
             day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
             totalBalanceMs += day.balanceMs;
         });
         return { summary, totalBalanceMs };
-    // Adicionamos 'tick' à lista de dependências para forçar o recálculo a cada minuto
-    }, [points, setTick]);
+    }, [points]);
 
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
@@ -647,7 +632,7 @@ const ServidorDashboard = () => {
                              Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
                         </p>
                         <p className="text-sm text-gray-500 dark:text-gray-400">
-                             Matrícula: {user.matricula} | Unidade: {unidadeNome}
+                            Matrícula: {user.matricula} | Unidade: {unidadeNome}
                         </p>
                     </div>
                     <div className="flex items-center space-x-4">
@@ -657,7 +642,7 @@ const ServidorDashboard = () => {
                             className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
                         >
                             <LogOut className="w-4 h-4 mr-1" />
-                             Sair
+                            Sair
                         </button>
                     </div>
                 </header>
@@ -786,7 +771,7 @@ const GestorDashboard = () => {
                             <User className="inline-block w-8 h-8 mr-2 text-blue-500" /> Painel do Gestor
                         </h1>
                         <p className="text-gray-500 dark:text-gray-400 mt-1">
-                             Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Unidade: {unidadeNome}.
+                            Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Unidade: {unidadeNome}.
                         </p>
                     </div>
                     <div className="flex items-center space-x-4">
@@ -800,7 +785,7 @@ const GestorDashboard = () => {
                 <section className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-blue-100 dark:border-slate-700">
                     <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center">
                         <Mail className="w-5 h-5 mr-2 text-amber-500" />
-                         Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
+                        Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
                     </h2>
 
                     <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
@@ -870,7 +855,7 @@ const UserManagement = () => {
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setUsers(Object.values(DUMMY_ACCOUNTS).map(data => ({ id: data.matricula, ...data })));
+            setUsers(Object.entries(DUMMY_ACCOUNTS).map(([email, data]) => ({ id: data.matricula, email, ...data })));
             setLoading(false);
             return;
         };
@@ -1218,7 +1203,7 @@ const RHAdminDashboard = () => {
 };
 
 // --- ///////////////////////////////////////////// ---
-// --- Componente de Rodapé                        ---
+// --- Componente de Rodapé                          ---
 // --- ///////////////////////////////////////////// ---
 const Footer = () => {
     return (
@@ -1274,4 +1259,4 @@ export default function App() {
             </GlobalMessageProvider>
         </ThemeProvider>
     );
-}
+} faça uma verificação e teste todas as funções e corrija as que não demonstarem execução ou funcionamento adequado 
