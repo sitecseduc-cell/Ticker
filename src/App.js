@@ -140,11 +140,6 @@ const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, []);
     
-    const handleLogin = useCallback(async (matricula, password) => {
-        const demoAccount = Object.values(DUMMY_ACCOUNTS).find(acc => acc.matricula === matricula);
-        if (demoAccount && demoAccount.password === password) {
-            setUser({ uid: demoAccount.matricula, ...demoAccount });
-            return;
         }
 
         if (!isFirebaseInitialized) {
@@ -356,13 +351,6 @@ const LoginScreen = () => {
              <div className="mt-4 text-center text-sm">
                 <button className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
             </div>
-             <div className="mt-6 pt-4 border-t dark:border-gray-800">
-                <h3 className="text-sm font-semibold text-center mb-2 text-slate-600 dark:text-slate-400">Contas de Demonstração (Senha: 123)</h3>
-                <ul className="text-xs space-y-1 text-slate-500 dark:text-slate-500 text-center">
-                    <li><span className="font-semibold">RH:</span> 10001 | <span className="font-semibold">Gestor:</span> 20002 | <span className="font-semibold">Servidor:</span> 30003</li>
-                </ul>
-            </div>
-        </div>
     );
 };
 
@@ -814,12 +802,8 @@ const UserManagement = () => {
 
     const usersCollectionPath = `/artifacts/${appId}/${USER_COLLECTION}`;
 
-    useEffect(() => {
-        if (!isFirebaseInitialized) {
-            setUsers(Object.entries(DUMMY_ACCOUNTS).map(([email, data]) => ({ id: data.matricula, email, ...data })));
-            setLoading(false);
-            return;
-        };
+    useEffect(() => { 
+       };
         const q = query(collection(db, usersCollectionPath));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
