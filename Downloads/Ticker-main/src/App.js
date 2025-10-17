@@ -34,8 +34,7 @@ try {
     console.error("Erro ao inicializar o Firebase:", error);
     app = {}; auth = {}; db = null;
 }
-
-};
+;
 
 // --- Constantes ---
 const STATUS_COLORS = {
