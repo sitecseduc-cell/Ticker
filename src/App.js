@@ -97,7 +97,20 @@ const AuthProvider = ({ children }) => {
 
     // Carregar unidades
     useEffect(() => {
-        // ... (código existente para carregar unidades)
+        if (!isFirebaseInitialized) {
+            setUnidades({
+                'unidade-adm-01': { name: 'Controle e Movimentação (Demo)' },
+                'unidade-esc-01': { name: 'Escola Municipal A (Demo)' },
+            });
+            return;
+        }
+        const q = query(collection(db, `/artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const units = {};
+            snapshot.forEach(doc => units[doc.id] = doc.data());
+            setUnidades(units);
+        });
+        return () => unsubscribe();
     }, []);
 
     // Lógica de autenticação
@@ -125,8 +138,6 @@ const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, []);
 
-    // A CHAVE EXTRA ESTAVA AQUI E FOI REMOVIDA
-
     const handleLogin = useCallback(async (matricula, password) => {
         if (!isFirebaseInitialized) {
             throw new Error('Matrícula ou senha incorretos.');
@@ -136,25 +147,25 @@ const AuthProvider = ({ children }) => {
             const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
             const querySnapshot = await getDocs(q);
-    
+
             if (querySnapshot.empty) {
                 throw new Error("Matrícula ou senha incorretos.");
             }
-    
+
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
-            const userEmail = userData.email; 
-    
+            const userEmail = userData.email;
+
             if (!userEmail) {
                 console.error("O documento do usuário não possui o campo de email:", userDoc.id);
                 throw new Error("Falha no login. O perfil do usuário está incompleto.");
             }
-    
+
             await signInWithEmailAndPassword(auth, userEmail, password);
 
-        } catch(error) {
-             console.error("Firebase login failed:", error);
-             throw new Error("Matrícula ou senha incorretos.");
+        } catch (error) {
+            console.error("Firebase login failed:", error);
+            throw new Error("Matrícula ou senha incorretos.");
         }
     }, []);
 
@@ -337,6 +348,7 @@ const LoginScreen = () => {
              <div className="mt-4 text-center text-sm">
                 <button className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
             </div>
+        </div>
     );
 };
 
@@ -789,7 +801,15 @@ const UserManagement = () => {
     const usersCollectionPath = `/artifacts/${appId}/${USER_COLLECTION}`;
 
     useEffect(() => { 
-       };
+        if (!isFirebaseInitialized) { 
+            setUsers([
+                {id: 'demo1', nome: 'Admin Demo', matricula: '001', role: 'rh', unidadeId: 'unidade-adm-01'},
+                {id: 'demo2', nome: 'Gestor Demo', matricula: '002', role: 'gestor', unidadeId: 'unidade-esc-01'},
+                {id: 'demo3', nome: 'Servidor Demo', matricula: '003', role: 'servidor', unidadeId: 'unidade-esc-01'},
+            ]);
+            setLoading(false);
+            return;
+        };
         const q = query(collection(db, usersCollectionPath));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
