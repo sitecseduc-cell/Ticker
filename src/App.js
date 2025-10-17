@@ -13,8 +13,8 @@ import {
 } from 'lucide-react';
 
 // --- /src/firebase/config.js (Simulado) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'secretaria-educacao-ponto-demo';
-const firebaseConfigJSON = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+const appId = process.env.REACT_APP_ID || 'secretaria-educacao-ponto-demo';
+const firebaseConfigJSON = process.env.REACT_APP_FIREBASE_CONFIG || null;
 
 let app, auth, db;
 let isFirebaseInitialized = false;
@@ -35,12 +35,6 @@ try {
     app = {}; auth = {}; db = null;
 }
 
-// --- Dados de Demonstração ---
-const DUMMY_ACCOUNTS = {
-    'rh@edu.br': { email: 'rh@edu.br', password: '123', role: 'rh', nome: 'Admin RH', unidadeId: 'unidade-adm-01', matricula: '10001' },
-    'gestor@edu.br': { email: 'gestor@edu.br', password: '123', role: 'gestor', nome: 'Diretor da Unidade', unidadeId: 'unidade-adm-01', matricula: '20002' },
-    'servidor@edu.br': { email: 'servidor@edu.br', password: '123', role: 'servidor', nome: 'Ana Servidora', unidadeId: 'unidade-adm-01', matricula: '30003' },
-    'estagiario@edu.br': { email: 'estagiario@edu.br', password: '123', role: 'servidor', nome: 'Pedro Estagiário', unidadeId: 'unidade-adm-01', matricula: '40004' }
 };
 
 // --- Constantes ---
