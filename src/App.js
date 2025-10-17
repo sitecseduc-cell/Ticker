@@ -1,9 +1,9 @@
 /* global __app_id, __firebase_config */
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, signInAnonymously, onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
 import {
-    getFirestore, doc, setDoc, collection, query, where, orderBy, onSnapshot,
+    getFirestore, doc, collection, query, where, orderBy, onSnapshot,
     addDoc, getDoc, updateDoc, deleteDoc, getDocs
 } from 'firebase/firestore';
 import {
@@ -13,8 +13,9 @@ import {
 } from 'lucide-react';
 
 // --- /src/firebase/config.js (Simulado) ---
-const appId = process.env.REACT_APP_ID || 'secretaria-educacao-ponto-demo';
-const firebaseConfigJSON = process.env.REACT_APP_FIREBASE_CONFIG || null;
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'secretaria-educacao-ponto-demo';
+const firebaseConfigJSON = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
+
 
 let app, auth, db;
 let isFirebaseInitialized = false;
@@ -35,6 +36,7 @@ try {
     app = {}; auth = {}; db = null;
 }
 
+
 // --- Constantes ---
 const STATUS_COLORS = {
     entrada: 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
@@ -45,7 +47,7 @@ const STATUS_COLORS = {
     pendente: 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800',
     aprovado: 'text-green-700 bg-green-100 dark:bg-green-900/50 dark:text-green-400 border border-green-200 dark:border-green-800',
     reprovado: 'text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800',
-}
+};
 const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
 const USER_COLLECTION = 'users';
 const UNIT_COLLECTION = 'unidades';
@@ -137,7 +139,7 @@ const AuthProvider = ({ children }) => {
         });
         return () => unsubscribe();
     }, []);
-
+    
     const handleLogin = useCallback(async (matricula, password) => {
         if (!isFirebaseInitialized) {
             throw new Error('Matrícula ou senha incorretos.');
@@ -147,25 +149,25 @@ const AuthProvider = ({ children }) => {
             const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
             const querySnapshot = await getDocs(q);
-
+    
             if (querySnapshot.empty) {
                 throw new Error("Matrícula ou senha incorretos.");
             }
-
+    
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
-            const userEmail = userData.email;
-
+            const userEmail = userData.email; 
+    
             if (!userEmail) {
                 console.error("O documento do usuário não possui o campo de email:", userDoc.id);
                 throw new Error("Falha no login. O perfil do usuário está incompleto.");
             }
-
+    
             await signInWithEmailAndPassword(auth, userEmail, password);
 
-        } catch (error) {
-            console.error("Firebase login failed:", error);
-            throw new Error("Matrícula ou senha incorretos.");
+        } catch(error) {
+             console.error("Firebase login failed:", error);
+             throw new Error("Matrícula ou senha incorretos.");
         }
     }, []);
 
@@ -327,6 +329,17 @@ const LoginScreen = () => {
             setLoading(false);
         }
     };
+    
+    const onForgotPassword = (e) => {
+        e.preventDefault();
+        setGlobalMessage({ type: 'warning', title: 'Função não implementada', message: 'A recuperação de senha ainda não está disponível.' });
+    };
+
+    const onSignUp = (e) => {
+        e.preventDefault();
+        setGlobalMessage({ type: 'warning', title: 'Função não implementada', message: 'O cadastro de novos usuários ainda não está disponível.' });
+    };
+
 
     return (
         <div className="relative bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-gray-800">
@@ -345,8 +358,9 @@ const LoginScreen = () => {
                     {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Entrar'}
                  </button>
             </form>
-             <div className="mt-4 text-center text-sm">
-                <button className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
+            <div className="mt-4 flex justify-between items-center text-sm">
+                <button onClick={onForgotPassword} className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
+                <button onClick={onSignUp} className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition">Criar Conta</button>
             </div>
         </div>
     );
@@ -800,8 +814,8 @@ const UserManagement = () => {
 
     const usersCollectionPath = `/artifacts/${appId}/${USER_COLLECTION}`;
 
-    useEffect(() => { 
-        if (!isFirebaseInitialized) { 
+    useEffect(() => {
+        if (!isFirebaseInitialized) {
             setUsers([
                 {id: 'demo1', nome: 'Admin Demo', matricula: '001', role: 'rh', unidadeId: 'unidade-adm-01'},
                 {id: 'demo2', nome: 'Gestor Demo', matricula: '002', role: 'gestor', unidadeId: 'unidade-esc-01'},
@@ -1195,3 +1209,4 @@ export default function App() {
         </ThemeProvider>
     );
 }
+
