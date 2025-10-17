@@ -35,8 +35,6 @@ try {
     app = {}; auth = {}; db = null;
 }
 
-};
-
 // --- Constantes ---
 const STATUS_COLORS = {
     entrada: 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
@@ -47,7 +45,7 @@ const STATUS_COLORS = {
     pendente: 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800',
     aprovado: 'text-green-700 bg-green-100 dark:bg-green-900/50 dark:text-green-400 border border-green-200 dark:border-green-800',
     reprovado: 'text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800',
-};
+}
 const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
 const USER_COLLECTION = 'users';
 const UNIT_COLLECTION = 'unidades';
