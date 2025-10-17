@@ -1,10 +1,10 @@
 /* global __app_id, __firebase_config */
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc, getDocs
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc
 } from 'firebase/firestore';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
@@ -140,6 +140,47 @@ const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, []);
     
+    const handleSignUp = useCallback(async (nome, email, matricula, password) => {
+        if (!isFirebaseInitialized) {
+            throw new Error('O cadastro não está disponível no modo de demonstração.');
+        }
+
+        try {
+            // Check if matricula already exists
+            const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
+            const q = query(usersRef, where("matricula", "==", matricula));
+            const querySnapshot = await getDocs(q);
+
+            if (!querySnapshot.empty) {
+                throw new Error("Esta matrícula já está em uso.");
+            }
+
+            // Create user in Firebase Auth
+            const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+            const user = userCredential.user;
+
+            // Save user details in Firestore
+            const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, user.uid);
+            await setDoc(userDocRef, {
+                nome,
+                email,
+                matricula,
+                role: 'servidor', // Default role for new users
+                unidadeId: null, // Or a default unit if applicable
+                createdAt: new Date(),
+            });
+
+            // The onAuthStateChanged listener will handle setting the user state
+        } catch (error) {
+            console.error("Firebase sign-up failed:", error);
+            if (error.code === 'auth/email-already-in-use') {
+                throw new Error("Este email já está em uso.");
+            }
+            throw new Error(error.message || "Falha ao criar a conta.");
+        }
+    }, []);
+
+
     const handleLogin = useCallback(async (matricula, password) => {
         if (!isFirebaseInitialized) {
             throw new Error('Matrícula ou senha incorretos.');
@@ -171,6 +212,19 @@ const AuthProvider = ({ children }) => {
         }
     }, []);
 
+    const handleForgotPassword = useCallback(async (email) => {
+        if (!isFirebaseInitialized) {
+            throw new Error('A recuperação de senha não está disponível no modo de demonstração.');
+        }
+        try {
+            await sendPasswordResetEmail(auth, email);
+        } catch (error) {
+            console.error("Firebase password reset failed:", error);
+            throw new Error("Falha ao enviar o email de recuperação. Verifique o endereço de email.");
+        }
+    }, []);
+
+
     const handleLogout = useCallback(async () => {
         if (isFirebaseInitialized) {
             await signOut(auth);
@@ -186,9 +240,11 @@ const AuthProvider = ({ children }) => {
         unidades,
         handleLogin,
         handleLogout,
+        handleSignUp,
+        handleForgotPassword,
         db,
         auth
-    }), [user, isLoading, unidades, handleLogin, handleLogout]);
+    }), [user, isLoading, unidades, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -311,7 +367,7 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     );
 };
 
-const LoginScreen = () => {
+const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [matricula, setMatricula] = useState('');
@@ -330,14 +386,9 @@ const LoginScreen = () => {
         }
     };
     
-    const onForgotPassword = (e) => {
+    const onForgotPasswordClick = (e) => {
         e.preventDefault();
-        setGlobalMessage({ type: 'warning', title: 'Função não implementada', message: 'A recuperação de senha ainda não está disponível.' });
-    };
-
-    const onSignUp = (e) => {
-        e.preventDefault();
-        setGlobalMessage({ type: 'warning', title: 'Função não implementada', message: 'O cadastro de novos usuários ainda não está disponível.' });
+        onSwitchToForgotPassword();
     };
 
 
@@ -359,8 +410,100 @@ const LoginScreen = () => {
                  </button>
             </form>
             <div className="mt-4 flex justify-between items-center text-sm">
-                <button onClick={onForgotPassword} className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
-                <button onClick={onSignUp} className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition">Criar Conta</button>
+                <button onClick={onForgotPasswordClick} className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
+                <button onClick={onSwitchToSignUp} className="font-semibold text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 transition">Criar Conta</button>
+            </div>
+        </div>
+    );
+};
+
+const SignUpScreen = ({ onSwitchToLogin }) => {
+    const { handleSignUp } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const [nome, setNome] = useState('');
+    const [email, setEmail] = useState('');
+    const [matricula, setMatricula] = useState('');
+    const [password, setPassword] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const onSignUp = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await handleSignUp(nome, email, matricula, password);
+            setGlobalMessage({ type: 'success', title: 'Cadastro Realizado!', message: 'Sua conta foi criada com sucesso. Faça o login para continuar.' });
+            onSwitchToLogin(); // Switch back to login screen on success
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Falha no Cadastro', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="relative bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-gray-800">
+            <div className="absolute top-4 right-4">
+                <ThemeToggleButton />
+            </div>
+            <div className="text-center mb-8">
+                 <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="mx-auto mb-4" style={{ width: '60px', height: '60px' }} />
+                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Criar Nova Conta</h2>
+                <p className="text-slate-500 dark:text-slate-400">Preencha os dados para se cadastrar.</p>
+            </div>
+            <form onSubmit={onSignUp} className="space-y-4">
+                 <input type="text" placeholder="Nome Completo" value={nome} onChange={(e) => setNome(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
+                    {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Cadastrar'}
+                 </button>
+            </form>
+            <div className="mt-4 text-center text-sm">
+                <button onClick={onSwitchToLogin} className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Já tem uma conta? Faça o login</button>
+            </div>
+        </div>
+    );
+};
+
+const ForgotPasswordScreen = ({ onSwitchToLogin }) => {
+    const { handleForgotPassword } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const [email, setEmail] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    const onResetPassword = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            await handleForgotPassword(email);
+            setGlobalMessage({ type: 'success', title: 'Email Enviado!', message: 'Se uma conta com este email existir, um link de recuperação foi enviado.' });
+            onSwitchToLogin();
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Falha no Envio', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="relative bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-gray-800">
+            <div className="absolute top-4 right-4">
+                <ThemeToggleButton />
+            </div>
+            <div className="text-center mb-8">
+                <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="mx-auto mb-4" style={{ width: '60px', height: '60px' }} />
+                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Recuperar Senha</h2>
+                <p className="text-slate-500 dark:text-slate-400">Insira seu email para receber o link de recuperação.</p>
+            </div>
+            <form onSubmit={onResetPassword} className="space-y-4">
+                <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
+                    {loading ? <Loader2 className="w-6 h-6 animate-spin" /> : 'Enviar Link'}
+                </button>
+            </form>
+            <div className="mt-4 text-center text-sm">
+                <button onClick={onSwitchToLogin} className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Voltar para o Login</button>
             </div>
         </div>
     );
@@ -1172,6 +1315,7 @@ const Footer = () => {
 
 const AppContent = () => {
     const { user, role, isLoading } = useAuthContext();
+    const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
 
     if (isLoading) {
         return <LoadingScreen />;
@@ -1187,7 +1331,17 @@ const AppContent = () => {
         <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-gray-950 text-slate-800 dark:text-slate-200 antialiased">
             <main className={`flex-grow ${!user ? 'flex items-center justify-center p-4 bg-dots' : ''}`}>
                 {!user ? (
-                    <LoginScreen />
+                    (() => {
+                        switch (authView) {
+                            case 'signup':
+                                return <SignUpScreen onSwitchToLogin={() => setAuthView('login')} />;
+                            case 'forgotPassword':
+                                return <ForgotPasswordScreen onSwitchToLogin={() => setAuthView('login')} />;
+                            case 'login':
+                            default:
+                                return <LoginScreen onSwitchToSignUp={() => setAuthView('signup')} onSwitchToForgotPassword={() => setAuthView('forgotPassword')} />;
+                        }
+                    })()
                 ) : (
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
