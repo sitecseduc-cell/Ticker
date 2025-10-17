@@ -45,14 +45,14 @@ const DUMMY_ACCOUNTS = {
 
 // --- Constantes ---
 const STATUS_COLORS = {
-    entrada: 'text-emerald-600 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400',
-    saida: 'text-gray-600 bg-gray-100 dark:bg-gray-700 dark:text-gray-300',
-    pausa: 'text-amber-600 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-400',
-    volta: 'text-indigo-600 bg-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-400',
-    finished: 'text-gray-500 bg-gray-200 dark:bg-gray-700 dark:text-gray-400',
-    pendente: 'text-amber-600 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-400',
-    aprovado: 'text-green-600 bg-green-100 dark:bg-green-900/50 dark:text-green-400',
-    reprovado: 'text-red-600 bg-red-100 dark:bg-red-900/50 dark:text-red-400',
+    entrada: 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
+    saida: 'text-slate-700 bg-slate-100 dark:bg-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-600',
+    pausa: 'text-amber-700 bg-amber-100 dark:bg-amber-900/50 dark:text-amber-400 border border-amber-200 dark:border-amber-800',
+    volta: 'text-indigo-700 bg-indigo-100 dark:bg-indigo-900/50 dark:text-indigo-400 border border-indigo-200 dark:border-indigo-800',
+    finished: 'text-slate-500 bg-slate-200 dark:bg-slate-700 dark:text-slate-400 border border-slate-300 dark:border-slate-600',
+    pendente: 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800',
+    aprovado: 'text-green-700 bg-green-100 dark:bg-green-900/50 dark:text-green-400 border border-green-200 dark:border-green-800',
+    reprovado: 'text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800',
 };
 const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
 const USER_COLLECTION = 'users';
@@ -135,7 +135,6 @@ const AuthProvider = ({ children }) => {
                 if (userSnap.exists()) {
                     setUser({ uid: firebaseUser.uid, ...userSnap.data() });
                 } else {
-                    // Se o usuário existe no Auth mas não no Firestore (caso raro), desloga.
                     await signOut(auth);
                     setUser(null);
                 }
@@ -148,21 +147,16 @@ const AuthProvider = ({ children }) => {
     }, []);
     
     const handleLogin = useCallback(async (matricula, password) => {
-        // Prioritize checking demo accounts, as the user might be using them
-        // even in an environment where Firebase is technically initialized.
         const demoAccount = Object.values(DUMMY_ACCOUNTS).find(acc => acc.matricula === matricula);
         if (demoAccount && demoAccount.password === password) {
             setUser({ uid: demoAccount.matricula, ...demoAccount });
-            return; // Successful demo login, so we exit.
+            return;
         }
 
-        // If it's not a demo account, proceed with Firebase login.
         if (!isFirebaseInitialized) {
-            // If Firebase isn't set up and it wasn't a demo account, then it's an error.
             throw new Error('Matrícula ou senha incorretos.');
         }
 
-        // Modo Firebase for real users
         try {
             const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
@@ -174,7 +168,6 @@ const AuthProvider = ({ children }) => {
     
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
-            // Assumimos que o email está salvo no documento do usuário
             const userEmail = userData.email; 
     
             if (!userEmail) {
@@ -182,11 +175,9 @@ const AuthProvider = ({ children }) => {
                 throw new Error("Falha no login. O perfil do usuário está incompleto.");
             }
     
-            // signInWithEmailAndPassword will trigger onAuthStateChanged, which handles setting the user.
             await signInWithEmailAndPassword(auth, userEmail, password);
 
         } catch(error) {
-             // Avoid showing specific Firebase errors to the user for security.
              console.error("Firebase login failed:", error);
              throw new Error("Matrícula ou senha incorretos.");
         }
@@ -207,8 +198,8 @@ const AuthProvider = ({ children }) => {
         unidades,
         handleLogin,
         handleLogout,
-        db, // Apenas para componentes que ainda não foram totalmente refatorados
-        auth // Apenas para componentes que ainda não foram totalmente refatorados
+        db,
+        auth
     }), [user, isLoading, unidades, handleLogin, handleLogout]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -229,16 +220,13 @@ const useAuthContext = () => useContext(AuthContext);
 const useGlobalMessage = () => useContext(GlobalMessageContext);
 
 
-// --- ///////////////////////////////////////////// ---
-// --- /src/components/common/ (Simulados)           ---
-// --- ///////////////////////////////////////////// ---
-
+// --- Components ---
 const ThemeToggleButton = () => {
     const { theme, toggleTheme } = useThemeContext();
     return (
         <button
             onClick={toggleTheme}
-            className="p-2 rounded-full bg-gray-200 dark:bg-slate-700 text-gray-600 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-slate-600 transition-colors"
+            className="p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
             aria-label="Alternar tema"
         >
             {theme === 'light' ? <Moon className="w-5 h-5" /> : <Sun className="w-5 h-5" />}
@@ -247,15 +235,14 @@ const ThemeToggleButton = () => {
 };
 
 const LoadingScreen = () => (
-    <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-slate-900">
-        <Loader2 className="w-8 h-8 text-blue-500 animate-spin" />
-        <p className="mt-4 text-lg font-medium text-gray-700 dark:text-gray-300">Carregando sistema...</p>
+    <div className="flex flex-col items-center justify-center min-h-screen bg-white dark:bg-gray-950">
+        <Loader2 className="w-10 h-10 text-blue-600 animate-spin" />
+        <p className="mt-4 text-lg font-medium text-slate-700 dark:text-slate-300">Carregando sistema...</p>
     </div>
 );
 
 const GlobalMessageContainer = () => {
     const { message, setMessage } = useGlobalMessage();
-
     useEffect(() => {
         if (message) {
             const timer = setTimeout(() => setMessage(null), 5000);
@@ -265,6 +252,14 @@ const GlobalMessageContainer = () => {
 
     if (!message) return null;
 
+    const baseClasses = "fixed top-5 right-5 w-full max-w-sm z-[100] transition-all duration-300";
+    const animationClass = message ? "opacity-100 translate-x-0" : "opacity-0 translate-x-full";
+
+    const typeClasses = {
+        success: 'bg-green-50 border-green-300 dark:bg-green-950 dark:border-green-800',
+        error: 'bg-red-50 border-red-300 dark:bg-red-950 dark:border-red-800',
+        warning: 'bg-yellow-50 border-yellow-300 dark:bg-yellow-950 dark:border-yellow-800',
+    };
     const iconMap = {
         success: <CheckCircle className="w-6 h-6 text-green-500" />,
         error: <XCircle className="w-6 h-6 text-red-500" />,
@@ -272,14 +267,14 @@ const GlobalMessageContainer = () => {
     };
 
     return (
-        <div className="fixed top-5 right-5 w-full max-w-sm z-[100]">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-lg dark:shadow-slate-950/50 border dark:border-slate-700 p-4 flex items-start space-x-3">
+        <div className={`${baseClasses} ${animationClass}`}>
+            <div className={`rounded-lg shadow-lg border p-4 flex items-start space-x-3 ${typeClasses[message.type]}`}>
                 {iconMap[message.type]}
                 <div className="flex-1">
-                    <p className="font-bold text-gray-800 dark:text-gray-100">{message.title}</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-400">{message.message}</p>
+                    <p className="font-bold text-slate-800 dark:text-slate-100">{message.title}</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-400">{message.message}</p>
                 </div>
-                <button onClick={() => setMessage(null)} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300">
+                <button onClick={() => setMessage(null)} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300">
                     <X className="w-5 h-5" />
                 </button>
             </div>
@@ -290,14 +285,14 @@ const GlobalMessageContainer = () => {
 const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isLoading }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 dark:bg-opacity-80 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md p-6">
-                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100 flex items-center">
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 transition-opacity animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 transform transition-all animate-in fade-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
                     <AlertTriangle className="w-5 h-5 mr-2 text-yellow-500" /> {title}
                 </h3>
-                <p className="text-gray-600 dark:text-gray-300 mt-2">{message}</p>
+                <p className="text-slate-600 dark:text-slate-300 mt-2">{message}</p>
                 <div className="flex justify-end space-x-3 mt-6">
-                    <button onClick={onCancel} className="px-4 py-2 text-gray-700 bg-gray-200 rounded-lg hover:bg-gray-300 dark:bg-slate-700 dark:text-gray-200 dark:hover:bg-slate-600 transition">Cancelar</button>
+                    <button onClick={onCancel} className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 dark:bg-gray-700 dark:text-slate-200 dark:hover:bg-gray-600 transition">Cancelar</button>
                     <button onClick={onConfirm} disabled={isLoading} className="px-4 py-2 text-white bg-red-600 rounded-lg hover:bg-red-700 transition disabled:bg-red-400 flex items-center">
                         {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
                         Confirmar
@@ -311,32 +306,26 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isLoad
 const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     if (!isOpen) return null;
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-60 flex items-center justify-center z-50 p-4" onClick={onClose}>
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg p-6" onClick={e => e.stopPropagation()}>
-                <h3 className="text-lg font-bold text-gray-800 dark:text-gray-100">Visualizar Anexo</h3>
-                <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Nome do arquivo: {fileName}</p>
-                <div className="mt-4 p-4 border rounded-lg text-center bg-gray-50 dark:bg-slate-700 dark:border-slate-600">
-                    <p className="font-semibold dark:text-gray-200">Visualização de anexo simulada.</p>
-                    <p className="text-sm text-gray-600 dark:text-gray-300">Em um ambiente de produção, o arquivo seria exibido aqui.</p>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Visualizar Anexo</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Nome do arquivo: {fileName}</p>
+                <div className="mt-4 p-4 border rounded-lg text-center bg-slate-50 dark:bg-gray-800 dark:border-gray-700">
+                    <p className="font-semibold dark:text-slate-200">Visualização de anexo simulada.</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">Em um ambiente de produção, o arquivo seria exibido aqui.</p>
                     <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-blue-600 hover:underline text-xs break-all">
                         URL simulada: {fileUrl}
                     </a>
                 </div>
-                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600">Fechar</button>
+                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
             </div>
         </div>
     );
 };
 
-
-// --- ///////////////////////////////////////////// ---
-// --- /src/components/auth/LoginScreen.js (Simulado) ---
-// --- ///////////////////////////////////////////// ---
-
 const LoginScreen = () => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const { theme, toggleTheme } = useThemeContext();
     const [matricula, setMatricula] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -354,39 +343,35 @@ const LoginScreen = () => {
     };
 
     return (
-        <div className="relative bg-white dark:bg-slate-800 p-8 rounded-xl shadow-2xl w-full max-w-md">
+        <div className="relative bg-white dark:bg-gray-900 p-8 rounded-2xl shadow-2xl w-full max-w-md border border-slate-200 dark:border-gray-800">
             <div className="absolute top-4 right-4">
                 <ThemeToggleButton />
             </div>
-            <div className="flex flex-col items-center mb-6">
-                 <h2 className="text-2xl font-bold dark:text-gray-100">Acesso ao Ponto</h2>
-                 <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="logo mt-4" style={{ width: '70px', height: '70px' }} />
+            <div className="text-center mb-8">
+                 <img src="https://i.ibb.co/932Mzz8w/SITECicone.png" alt="Logo Sitec" className="mx-auto mb-4" style={{ width: '60px', height: '60px' }} />
+                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-100">Controle de Ponto</h2>
+                <p className="text-slate-500 dark:text-slate-400">Acesse sua conta para continuar.</p>
             </div>
             <form onSubmit={onLogin} className="space-y-4">
-                 <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                 <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                 <button type="submit" disabled={loading} className="w-full py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 disabled:bg-blue-400 flex justify-center items-center">
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin"/> : 'Entrar'}
+                 <input type="text" placeholder="Matrícula" value={matricula} onChange={(e) => setMatricula(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
+                    {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Entrar'}
                  </button>
             </form>
              <div className="mt-4 text-center text-sm">
-                <button className="text-gray-500 hover:text-blue-600 dark:text-gray-400 dark:hover:text-blue-400">Esqueceu a Senha?</button>
+                <button className="text-slate-500 hover:text-blue-600 dark:text-slate-400 dark:hover:text-blue-400 transition">Esqueceu a Senha?</button>
             </div>
-             <div className="mt-6 pt-4 border-t dark:border-slate-700">
-                <h3 className="text-sm font-semibold mb-2 dark:text-gray-300">Contas de Demonstração (Senha: 123)</h3>
-                <ul className="text-xs space-y-1 text-gray-600 dark:text-gray-400">
-                    <li><span className="font-semibold">RH/Admin:</span> 10001</li>
-                    <li><span className="font-semibold">Gestor:</span> 20002</li>
-                    <li><span className="font-semibold">Servidor:</span> 30003</li>
+             <div className="mt-6 pt-4 border-t dark:border-gray-800">
+                <h3 className="text-sm font-semibold text-center mb-2 text-slate-600 dark:text-slate-400">Contas de Demonstração (Senha: 123)</h3>
+                <ul className="text-xs space-y-1 text-slate-500 dark:text-slate-500 text-center">
+                    <li><span className="font-semibold">RH:</span> 10001 | <span className="font-semibold">Gestor:</span> 20002 | <span className="font-semibold">Servidor:</span> 30003</li>
                 </ul>
             </div>
         </div>
     );
 };
 
-
-// --- Funções de Formatação ---
-// ... (Estas funções poderiam ir para um arquivo /src/utils/formatters.js)
 const formatTime = (timestamp) => {
     if (!timestamp) return 'N/A';
     const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
@@ -399,7 +384,7 @@ const formatDateOnly = (timestamp) => {
 };
 const formatDuration = (ms) => {
     if (ms === 0) return '00:00';
-    const sign = ms < 0 ? '-' : '';
+    const sign = ms < 0 ? '-' : '+';
     const absMs = Math.abs(ms);
     const totalSeconds = Math.round(absMs / 1000);
     const hours = Math.floor(totalSeconds / 3600);
@@ -407,9 +392,6 @@ const formatDuration = (ms) => {
     return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
-// --- /////////////////////////////////////////////////////////// ---
-// --- /src/components/servidor/SolicitationModal.js (Simulado)  ---
-// --- /////////////////////////////////////////////////////////// ---
 const SolicitationModal = ({ isOpen, onClose }) => {
     const { user, db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -470,34 +452,34 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     if (!isOpen) return null;
 
     return (
-       <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden">
-                <div className="p-6 border-b dark:border-slate-700 flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Nova Solicitação de Ponto</h3>
-                    <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300"><X className="w-6 h-6" /></button>
+       <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95">
+                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Nova Solicitação de Ponto</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
                 </div>
                 <form onSubmit={handleSubmit} className="p-6 space-y-4">
                     <div className="space-y-1">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Tipo de Solicitação</label>
-                        <select name="tipo" value={formData.tipo} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Tipo de Solicitação</label>
+                        <select name="tipo" value={formData.tipo} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
                             <option value="abono">Abono (Ajuste de Registro)</option>
                             <option value="justificativa">Justificativa (Ausência)</option>
                         </select>
                     </div>
                      <div className="space-y-1">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Data de Ocorrência</label>
-                        <input type="date" name="dataOcorrencia" value={formData.dataOcorrencia} onChange={handleChange} required className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"/>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Data de Ocorrência</label>
+                        <input type="date" name="dataOcorrencia" value={formData.dataOcorrencia} onChange={handleChange} required className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"/>
                     </div>
                      <div className="space-y-1">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300">Descrição Detalhada</label>
-                        <textarea name="justificativaTexto" value={formData.justificativaTexto} onChange={handleChange} rows="4" required className="w-full px-3 py-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"></textarea>
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">Descrição Detalhada</label>
+                        <textarea name="justificativaTexto" value={formData.justificativaTexto} onChange={handleChange} rows="4" required className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"></textarea>
                     </div>
-                    <div className="space-y-1 p-3 border border-dashed rounded-lg dark:border-slate-600">
-                        <label className="text-sm font-medium text-gray-700 dark:text-gray-300 block mb-2">Anexo (Opcional)</label>
-                        <input type="file" name="anexoFile" onChange={handleChange} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-900/50 dark:file:text-blue-300 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/70"/>
+                    <div className="space-y-1 p-3 border border-dashed rounded-lg dark:border-gray-700">
+                        <label className="text-sm font-medium text-slate-700 dark:text-slate-300 block mb-2">Anexo (Opcional)</label>
+                        <input type="file" name="anexoFile" onChange={handleChange} className="w-full text-sm file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:font-semibold file:bg-blue-50 file:text-blue-700 dark:file:bg-blue-900/50 dark:file:text-blue-300 hover:file:bg-blue-100 dark:hover:file:bg-blue-900/70 transition"/>
                         {formData.anexoFile && <p className="text-xs text-green-600 dark:text-green-400 mt-2 flex items-center"><File className="w-4 h-4 mr-1"/>{formData.anexoFile.name}</p>}
                     </div>
-                    <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-3 px-4 rounded-lg text-white font-semibold bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400">
+                    <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-3 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 transition">
                         {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
                         {loading ? 'Enviando...' : 'Enviar Solicitação'}
                     </button>
@@ -507,15 +489,9 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
-
-// --- /////////////////////////////////////////////////////////// ---
-// --- /src/components/dashboards/ServidorDashboard.js (Simulado) ---
-// --- /////////////////////////////////////////////////////////// ---
 const ServidorDashboard = () => {
     const { user, userId, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const { theme, toggleTheme } = useThemeContext();
-
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
     const [clockInLoading, setClockInLoading] = useState(false);
@@ -611,98 +587,94 @@ const ServidorDashboard = () => {
     }, [userId, db, pointCollectionPath, user?.unidadeId, nextPointType, setGlobalMessage]);
 
     const buttonMap = {
-        entrada: { label: 'Entrada', icon: LogIn, color: 'bg-emerald-500 hover:bg-emerald-600' },
-        pausa: { label: 'Início Pausa', icon: Pause, color: 'bg-amber-500 hover:bg-amber-600' },
-        volta: { label: 'Fim Pausa', icon: RefreshCcw, color: 'bg-indigo-500 hover:bg-indigo-600' },
-        saida: { label: 'Saída', icon: LogOut, color: 'bg-gray-500 hover:bg-gray-600' },
-        finished: { label: 'Expediente Finalizado', icon: Clock, color: 'bg-gray-400' },
+        entrada: { label: 'Registrar Entrada', icon: LogIn, color: 'bg-emerald-600 hover:bg-emerald-700' },
+        pausa: { label: 'Iniciar Pausa', icon: Pause, color: 'bg-amber-500 hover:bg-amber-600' },
+        volta: { label: 'Retornar da Pausa', icon: RefreshCcw, color: 'bg-indigo-600 hover:bg-indigo-700' },
+        saida: { label: 'Registrar Saída', icon: LogOut, color: 'bg-slate-500 hover:bg-slate-600' },
+        finished: { label: 'Expediente Finalizado', icon: CheckCircle, color: 'bg-slate-400' },
     };
     const currentButton = buttonMap[nextPointType];
 
     return (
-        <div className="p-4 sm:p-8">
-            <div className="max-w-4xl mx-auto">
-                <header className="mb-8 border-b pb-4 dark:border-slate-700 flex justify-between items-center">
+        <div className="p-4 md:p-8">
+            <div className="max-w-5xl mx-auto">
+                <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100 flex items-center">
-                            <Clock className="w-8 h-8 mr-2 text-blue-500" />
-                             Ponto Eletrônico
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                            <Clock className="w-8 h-8 mr-3 text-blue-600" />
+                            Ponto Eletrônico
                         </h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
-                             Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
+                        <p className="text-slate-500 dark:text-slate-400 mt-1">
+                            Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
                         </p>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm text-slate-500 dark:text-slate-400">
                             Matrícula: {user.matricula} | Unidade: {unidadeNome}
                         </p>
                     </div>
-                    <div className="flex items-center space-x-4">
+                    <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
                         <button
                             onClick={handleLogout}
-                            className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"
+                            className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"
                         >
-                            <LogOut className="w-4 h-4 mr-1" />
+                            <LogOut className="w-4 h-4 mr-1.5" />
                             Sair
                         </button>
                     </div>
                 </header>
 
-                <section className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg mb-8 border border-blue-100 dark:border-slate-700 flex justify-between items-center">
-                    <div>
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Saldo Acumulado (Banco de Horas)</p>
-                        <p className={`text-4xl font-extrabold mt-1 ${dailySummary.totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {formatDuration(dailySummary.totalBalanceMs)}
-                        </p>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-sm font-medium text-gray-500 dark:text-gray-400">Jornada Padrão</p>
-                        <p className="text-xl font-bold text-blue-600 dark:text-blue-400">8h / dia</p>
-                    </div>
-                </section>
-
-                <section className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg mb-8 border border-blue-100 dark:border-slate-700">
-                   <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100">Registrar Ponto</h2>
-                   <div className="flex flex-col sm:flex-row items-center justify-between space-y-4 sm:space-y-0 sm:space-x-4">
-                        <div className="flex-1 text-center sm:text-left">
-                           <p className="text-sm text-gray-500 dark:text-gray-400">Próximo Ponto:</p>
-                           <p className={`text-4xl font-extrabold mt-1 ${nextPointType === 'finished' ? 'text-gray-500 dark:text-gray-400' : 'text-blue-600 dark:text-blue-400'}`}>{currentButton.label.toUpperCase()}</p>
-                           <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">Último: {lastPoint ? `${lastPoint.tipo.toUpperCase()} às ${formatTime(lastPoint.timestamp)}` : 'Nenhum'}</p>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+                    <div className="md:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                       <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100">Registrar Ponto</h2>
+                       <div className="flex flex-col sm:flex-row items-center justify-between gap-6 p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl">
+                            <div className="text-center sm:text-left">
+                               <p className="text-sm text-slate-500 dark:text-slate-400">Próxima Ação:</p>
+                               <p className={`text-2xl font-bold mt-1 ${nextPointType === 'finished' ? 'text-slate-500 dark:text-slate-400' : 'text-blue-600 dark:text-blue-400'}`}>{currentButton.label}</p>
+                               <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Último: {lastPoint ? `${lastPoint.tipo} às ${formatTime(lastPoint.timestamp)}` : 'Nenhum registro hoje'}</p>
+                            </div>
+                            <button onClick={() => registerPoint(nextPointType)} disabled={clockInLoading || nextPointType === 'finished'} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
+                                {clockInLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <currentButton.icon className="w-5 h-5 mr-2" />}
+                                {clockInLoading ? 'Processando...' : currentButton.label}
+                            </button>
                         </div>
-                        <button onClick={() => registerPoint(nextPointType)} disabled={clockInLoading || nextPointType === 'finished'} className={`flex items-center justify-center w-full sm:w-auto px-8 py-3 rounded-full text-white font-semibold transition shadow-md ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed`}>
-                            {clockInLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <currentButton.icon className="w-5 h-5 mr-2" />}
-                            {clockInLoading ? 'Processando...' : currentButton.label}
-                        </button>
                     </div>
-                </section>
+                     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800 flex flex-col justify-center">
+                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Banco de Horas</p>
+                         <p className={`text-4xl font-bold mt-1 ${dailySummary.totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatDuration(dailySummary.totalBalanceMs)}
+                         </p>
+                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">Jornada Padrão: 8h/dia</p>
+                    </div>
+                </div>
 
-                <section className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg mb-8 border dark:border-slate-700">
-                   <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center">Minhas Solicitações</h2>
-                   <div className="flex justify-end mb-4">
-                        <button onClick={() => setIsModalOpen(true)} className="flex items-center text-sm font-medium bg-blue-500 text-white py-2 px-4 rounded-lg hover:bg-blue-600 shadow-md">
-                            <Send className="w-4 h-4 mr-1" /> Nova Solicitação
+                <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                   <div className="flex justify-between items-center mb-4">
+                       <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">Minhas Solicitações</h2>
+                        <button onClick={() => setIsModalOpen(true)} className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition">
+                            <Plus className="w-4 h-4 mr-1" /> Nova Solicitação
                         </button>
                    </div>
-                   <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-                            <thead className="bg-gray-50 dark:bg-slate-900/50">
+                   <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead >
                                 <tr>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tipo/Data</th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
+                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                                 {solicitacoes.slice(0, 5).map(sol => (
-                                    <tr key={sol.id}>
-                                        <td className="px-3 py-3">
-                                            <span className="text-sm font-bold block">{sol.tipo === 'abono' ? 'Abono' : 'Justificativa'}</span>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">{sol.dataOcorrencia}</span>
+                                    <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                        <td className="px-4 py-4 whitespace-nowrap">
+                                            <div className="text-sm font-medium text-slate-900 dark:text-slate-200">{sol.tipo === 'abono' ? 'Abono' : 'Justificativa'}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
                                         </td>
-                                        <td className="px-3 py-3">
-                                            <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                        <td className="px-4 py-4 whitespace-nowrap">
+                                            <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
                                         </td>
                                     </tr>
                                 ))}
-                                {solicitacoes.length === 0 && <tr><td colSpan="2" className="py-4 text-center text-gray-500 dark:text-gray-400">Nenhuma solicitação.</td></tr>}
+                                {solicitacoes.length === 0 && <tr><td colSpan="2" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação encontrada.</td></tr>}
                             </tbody>
                         </table>
                    </div>
@@ -714,15 +686,9 @@ const ServidorDashboard = () => {
     );
 };
 
-
-// --- ///////////////////////////////////////////////////////// ---
-// --- /src/components/dashboards/GestorDashboard.js (Simulado) ---
-// --- ///////////////////////////////////////////////////////// ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const { theme } = useThemeContext();
-
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
@@ -744,7 +710,7 @@ const GestorDashboard = () => {
     }, [db, solicitacoesCollectionPath, user?.unidadeId]);
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
-        setLoadingAction(solicitationId);
+        setLoadingAction(solicitationId + newStatus);
         try {
             const solDocRef = doc(db, solicitacoesCollectionPath, solicitationId);
             await updateDoc(solDocRef, { status: newStatus, gestorId: user.uid, dataAprovacao: new Date() });
@@ -763,70 +729,74 @@ const GestorDashboard = () => {
     const getFileNameFromUrl = (url) => url.substring(url.lastIndexOf('/') + 1);
 
     return (
-        <div className="p-4 sm:p-8">
+        <div className="p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
-                 <header className="mb-8 border-b pb-4 dark:border-slate-700 flex justify-between items-center">
+                 <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100">
-                            <User className="inline-block w-8 h-8 mr-2 text-blue-500" /> Painel do Gestor
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                            <User className="inline-block w-8 h-8 mr-3 text-blue-600" /> Painel do Gestor
                         </h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">
+                        <p className="text-slate-500 dark:text-slate-400 mt-1">
                             Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Unidade: {unidadeNome}.
                         </p>
                     </div>
-                    <div className="flex items-center space-x-4">
+                     <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
-                        <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20">
-                            <LogOut className="w-4 h-4 mr-1" /> Sair
+                        <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30">
+                            <LogOut className="w-4 h-4 mr-1.5" /> Sair
                         </button>
                     </div>
                 </header>
 
-                <section className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-blue-100 dark:border-slate-700">
-                    <h2 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center">
+                <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                    <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
                         <Mail className="w-5 h-5 mr-2 text-amber-500" />
                         Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
                     </h2>
 
-                    <div className="overflow-x-auto border rounded-lg dark:border-slate-700">
-                        <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-                            <thead className="bg-gray-50 dark:bg-slate-900/50">
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead className="border-b border-slate-200 dark:border-gray-800">
                                 <tr>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Servidor</th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Tipo/Data</th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Justificativa</th>
-                                    <th className="px-3 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Status/Ações</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
                                 </tr>
                             </thead>
-                            <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
+                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                                 {solicitacoes.map(sol => (
-                                    <tr key={sol.id}>
-                                        <td className="px-3 py-3"><span className="text-sm font-medium">{sol.requesterNome}</span></td>
-                                        <td className="px-3 py-3">
-                                            <span className="font-bold text-xs block">{sol.tipo.toUpperCase()}</span>
-                                            <span className="text-xs text-gray-500 dark:text-gray-400">{sol.dataOcorrencia}</span>
+                                    <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                        <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
+                                        <td className="px-4 py-4">
+                                            <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
                                         </td>
-                                        <td className="px-3 py-3 text-sm text-gray-600 dark:text-gray-300 max-w-xs truncate" title={sol.justificativaTexto}>
-                                            {sol.justificativaTexto}
+                                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
+                                             <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
                                             {sol.anexoUrl &&
-                                                <button onClick={() => setViewingFile({ url: sol.anexoUrl, name: getFileNameFromUrl(sol.anexoUrl) })} className="text-blue-500 text-xs block mt-1 flex items-center hover:underline">
+                                                <button onClick={() => setViewingFile({ url: sol.anexoUrl, name: getFileNameFromUrl(sol.anexoUrl) })} className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
                                                     <File className="w-3 h-3 mr-1" /> Ver Anexo
                                                 </button>
                                             }
                                         </td>
-                                        <td className="px-3 py-3 space-x-2">
+                                        <td className="px-4 py-4">
                                             {sol.status === 'pendente' ? (
-                                                <>
-                                                    <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={loadingAction === sol.id} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-500 text-white hover:bg-green-600 disabled:bg-gray-300">Aprovar</button>
-                                                    <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={loadingAction === sol.id} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-500 text-white hover:bg-red-600 disabled:bg-gray-300">Reprovar</button>
-                                                </>
+                                                <div className="flex items-center space-x-2">
+                                                    <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                        {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                    </button>
+                                                    <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                        {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                    </button>
+                                                </div>
                                             ) : (
-                                                <span className={`px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
                                             )}
                                         </td>
                                     </tr>
                                 ))}
-                                {solicitacoes.length === 0 && <tr><td colSpan="4" className="py-4 text-center text-gray-500 dark:text-gray-400">Nenhuma solicitação.</td></tr>}
+                                {solicitacoes.length === 0 && <tr><td colSpan="4" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
                             </tbody>
                         </table>
                     </div>
@@ -838,9 +808,6 @@ const GestorDashboard = () => {
     );
 };
 
-// --- //////////////////////////////////////////////////////// ---
-// --- /src/components/admin/UserManagement.js (Simulado)     ---
-// --- //////////////////////////////////////////////////////// ---
 const UserManagement = () => {
     const { db, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -911,9 +878,9 @@ const UserManagement = () => {
     const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-blue-100 dark:border-slate-700">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center">
-                <Users className="w-5 h-5 mr-2 text-blue-500" /> Gestão de Usuários
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+            <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
+                <Users className="w-5 h-5 mr-2 text-blue-600" /> Gestão de Usuários
             </h3>
             <div className="relative w-full mb-4">
                 <input
@@ -921,32 +888,32 @@ const UserManagement = () => {
                     placeholder="Buscar por nome ou matrícula..."
                     value={searchTerm}
                     onChange={(e) => setSearchTerm(e.target.value)}
-                    className="w-full px-4 py-2 border rounded-lg pl-10 dark:bg-slate-700 dark:border-slate-600 dark:text-white"
+                    className="w-full px-4 py-2 border rounded-lg pl-10 dark:bg-gray-800 dark:border-gray-700 dark:text-white"
                 />
-                <Search className="absolute left-3 top-3 w-4 h-4 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
             </div>
              {loading ? (
-                 <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-500" /></div>
+                 <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
             ) : (
                  <div className="overflow-x-auto">
-                     <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-                         <thead className="bg-gray-50 dark:bg-slate-900/50">
+                     <table className="min-w-full">
+                         <thead className="border-b border-slate-200 dark:border-gray-800">
                             <tr>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Matrícula/Nome</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Perfil</th>
-                                <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Unidade</th>
-                                <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ações</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Matrícula/Nome</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Perfil</th>
+                                <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unidade</th>
+                                <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ações</th>
                             </tr>
                         </thead>
-                         <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
+                         <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                             {filteredUsers.map(user => (
-                                <tr key={user.id}>
+                                <tr key={user.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                     <td className="px-4 py-3">
-                                        <span className="text-sm font-medium block dark:text-gray-100">{user.nome}</span>
-                                        <span className="text-xs text-gray-500 dark:text-gray-400">Matrícula: {user.matricula}</span>
+                                        <span className="text-sm font-medium block text-slate-800 dark:text-slate-100">{user.nome}</span>
+                                        <span className="text-xs text-slate-500 dark:text-slate-400">Matrícula: {user.matricula}</span>
                                     </td>
-                                    <td className="px-4 py-3"><span className="text-sm dark:text-gray-300">{roleMap[user.role] || user.role}</span></td>
-                                    <td className="px-4 py-3 text-sm dark:text-gray-300">{unidades[user.unidadeId]?.name || 'N/A'}</td>
+                                    <td className="px-4 py-3"><span className="text-sm text-slate-700 dark:text-slate-300">{roleMap[user.role] || user.role}</span></td>
+                                    <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{unidades[user.unidadeId]?.name || 'N/A'}</td>
                                     <td className="px-4 py-3 text-right space-x-2">
                                         <button onClick={() => setEditingUser({...user})} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1"><Edit className="w-4 h-4" /></button>
                                         <button onClick={() => setUserToDelete(user)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1"><Trash2 className="w-4 h-4" /></button>
@@ -958,74 +925,71 @@ const UserManagement = () => {
                 </div>
             )}
             {editingUser && (
-                 <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-                     <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-lg">
-                         <div className="p-6 border-b dark:border-slate-700">
-                             <h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">Editar Usuário</h3>
-                         </div>
+                 <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+                     <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg animate-in zoom-in-95">
+                         <div className="p-6 border-b dark:border-gray-800">
+                            <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Editar Usuário</h3>
+                        </div>
                          <form onSubmit={handleUpdateUser} className="p-6 space-y-4">
-                             <div>
-                                 <label className="text-sm font-medium dark:text-gray-300">Nome</label>
-                                 <input type="text" name="nome" value={editingUser.nome} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                             </div>
-                             <div>
-                                 <label className="text-sm font-medium dark:text-gray-300">Matrícula</label>
-                                 <input type="text" name="matricula" value={editingUser.matricula} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white" />
-                             </div>
-                             <div>
-                                 <label className="text-sm font-medium dark:text-gray-300">Perfil</label>
-                                 <select name="role" value={editingUser.role} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white">
-                                     <option value="servidor">Servidor</option>
-                                     <option value="gestor">Gestor</option>
-                                     <option value="rh">RH/Admin</option>
-                                 </select>
-                             </div>
-                             <div>
-                                 <label className="text-sm font-medium dark:text-gray-300">Unidade</label>
-                                 <select name="unidadeId" value={editingUser.unidadeId} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white">
-                                     {Object.entries(unidades).map(([id, unit]) => (
-                                         <option key={id} value={id}>{unit.name}</option>
-                                     ))}
-                                 </select>
-                             </div>
-                             <div className="flex justify-end space-x-3 pt-4">
-                                 <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 bg-gray-200 dark:bg-slate-600 dark:text-gray-200 rounded-lg">Cancelar</button>
-                                 <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-500 text-white rounded-lg flex items-center disabled:bg-blue-300">
-                                     {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin"/>}
-                                     Salvar
-                                 </button>
-                             </div>
-                         </form>
-                     </div>
-                 </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Nome</label>
+                                <input type="text" name="nome" value={editingUser.nome} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Matrícula</label>
+                                <input type="text" name="matricula" value={editingUser.matricula} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Perfil</label>
+                                <select name="role" value={editingUser.role} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                    <option value="servidor">Servidor</option>
+                                    <option value="gestor">Gestor</option>
+                                    <option value="rh">RH/Admin</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Unidade</label>
+                                <select name="unidadeId" value={editingUser.unidadeId} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                    {Object.entries(unidades).map(([id, unit]) => (
+                                        <option key={id} value={id}>{unit.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex justify-end space-x-3 pt-4">
+                                <button type="button" onClick={() => setEditingUser(null)} className="px-4 py-2 bg-slate-200 dark:bg-gray-700 dark:text-slate-200 rounded-lg">Cancelar</button>
+                                <button type="submit" disabled={isSubmitting} className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center disabled:bg-blue-400">
+                                    {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin"/>}
+                                    Salvar
+                                </button>
+                            </div>
+                        </form>
+                    </div>
+                </div>
             )}
             <ConfirmationModal isOpen={!!userToDelete} title="Confirmar Exclusão" message={`Deseja realmente excluir o usuário ${userToDelete?.nome}? Esta ação é irreversível.`} onConfirm={handleDeleteUser} onCancel={() => setUserToDelete(null)} isLoading={isSubmitting} />
         </div>
     );
 };
 
-// --- ////////////////////////////////////////////////////// ---
-// --- /src/components/admin/UnitManagement.js (Simulado)     ---
-// --- ////////////////////////////////////////////////////// ---
 const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading }) => {
     if (!isOpen) return null;
     const handleChange = (e) => setUnit({ ...unit, [e.target.name]: e.target.value });
     return (
-        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
-            <div className="bg-white dark:bg-slate-800 rounded-xl shadow-2xl w-full max-w-md">
-                 <div className="p-6 border-b dark:border-slate-700"><h3 className="text-xl font-bold text-gray-800 dark:text-gray-100">{unit.id ? 'Editar Unidade' : 'Adicionar Unidade'}</h3></div>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md animate-in zoom-in-95">
+                 <div className="p-6 border-b dark:border-gray-800"><h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">{unit.id ? 'Editar Unidade' : 'Adicionar Unidade'}</h3></div>
                  <form onSubmit={onSave} className="p-6 space-y-4">
-                     <div>
-                         <label className="text-sm font-medium dark:text-gray-300">Nome da Unidade</label>
-                         <input type="text" name="name" value={unit.name} onChange={handleChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-slate-700 dark:border-slate-600 dark:text-white" required />
-                     </div>
-                     <div className="flex justify-end space-x-3 pt-4">
-                         <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-slate-600 dark:text-gray-200 rounded-lg">Cancelar</button>
-                         <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-500 text-white rounded-lg flex items-center disabled:bg-blue-300">
-                             {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin"/>} Salvar
-                         </button>
-                     </div>
-                 </form>
+                    <div>
+                        <label className="text-sm font-medium dark:text-slate-300">Nome da Unidade</label>
+                        <input type="text" name="name" value={unit.name} onChange={handleChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white" required />
+                    </div>
+                    <div className="flex justify-end space-x-3 pt-4">
+                        <button type="button" onClick={onClose} className="px-4 py-2 bg-slate-200 dark:bg-gray-700 dark:text-slate-200 rounded-lg">Cancelar</button>
+                        <button type="submit" disabled={isLoading} className="px-4 py-2 bg-blue-600 text-white rounded-lg flex items-center disabled:bg-blue-400">
+                            {isLoading && <Loader2 className="w-4 h-4 mr-2 animate-spin"/>} Salvar
+                        </button>
+                    </div>
+                </form>
             </div>
         </div>
     );
@@ -1089,23 +1053,23 @@ const UnitManagement = () => {
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-blue-100 dark:border-slate-700">
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
              <div className="flex justify-between items-center mb-4">
-                 <h3 className="text-xl font-semibold flex items-center dark:text-gray-100"><Home className="w-5 h-5 mr-2 text-blue-500" /> Gestão de Unidades</h3>
-                 <button onClick={() => setUnitToEdit({ name: '' })} className="flex items-center text-sm font-medium bg-green-600 text-white py-2 px-4 rounded-lg hover:bg-green-700"><Plus className="w-5 h-5 mr-1" /> Adicionar Unidade</button>
-             </div>
+                <h3 className="text-xl font-semibold flex items-center text-slate-800 dark:text-slate-100"><Home className="w-5 h-5 mr-2 text-blue-600" /> Gestão de Unidades</h3>
+                <button onClick={() => setUnitToEdit({ name: '' })} className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700"><Plus className="w-5 h-5 mr-1" /> Adicionar Unidade</button>
+            </div>
              <div className="overflow-x-auto">
-                 <table className="min-w-full divide-y divide-gray-200 dark:divide-slate-700">
-                     <thead className="bg-gray-50 dark:bg-slate-900/50">
+                 <table className="min-w-full">
+                     <thead className="border-b border-slate-200 dark:border-gray-800">
                         <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Nome da Unidade</th>
-                            <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase">Ações</th>
+                            <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nome da Unidade</th>
+                            <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ações</th>
                         </tr>
                     </thead>
-                     <tbody className="bg-white dark:bg-slate-800 divide-y divide-gray-200 dark:divide-slate-700">
+                     <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                         {units.map(unit => (
-                            <tr key={unit.id}>
-                                <td className="px-4 py-3 text-sm font-medium text-gray-900 dark:text-gray-200">{unit.name}</td>
+                            <tr key={unit.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-200">{unit.name}</td>
                                 <td className="px-4 py-3 text-right space-x-2">
                                     <button onClick={() => setUnitToEdit(unit)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1"><Edit className="w-4 h-4" /></button>
                                     <button onClick={() => setUnitToDelete(unit)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1"><Trash2 className="w-4 h-4" /></button>
@@ -1121,9 +1085,6 @@ const UnitManagement = () => {
     );
 };
 
-// --- ////////////////////////////////////////////////////// ---
-// --- /src/components/admin/MessageBox.js (Simulado)         ---
-// --- ////////////////////////////////////////////////////// ---
 const MessageBoxForAllUsers = () => {
     const { user: currentUser, db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1152,12 +1113,12 @@ const MessageBoxForAllUsers = () => {
     };
 
     return (
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg border border-blue-100 dark:border-slate-700">
-            <h3 className="text-xl font-semibold mb-4 text-gray-800 dark:text-gray-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-500"/> Enviar Mensagem Global</h3>
-            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+            <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
             <form onSubmit={handleSendMessage} className="space-y-3">
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-slate-700 dark:border-slate-600 dark:text-white"></textarea>
-                <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-500 hover:bg-blue-600 disabled:bg-blue-400">
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
+                <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
                      {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
                      {loading ? 'Enviando...' : 'Enviar Mensagem'}
                 </button>
@@ -1166,32 +1127,31 @@ const MessageBoxForAllUsers = () => {
     );
 };
 
-// --- /////////////////////////////////////////////////////////// ---
-// --- /src/components/dashboards/RHAdminDashboard.js (Simulado) ---
-// --- /////////////////////////////////////////////////////////// ---
 const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
     const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
-        <div className="p-4 sm:p-8">
+        <div className="p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
-                 <header className="mb-8 border-b dark:border-slate-700 pb-4 flex justify-between items-center">
+                 <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-gray-800 dark:text-gray-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-500" /> Painel de Administração (RH)</h1>
-                        <p className="text-gray-500 dark:text-gray-400 mt-1">Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Perfil: {roleMap[user.role]}.</p>
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-600" /> Painel de Administração (RH)</h1>
+                        <p className="text-slate-500 dark:text-slate-400 mt-1">Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Perfil: {roleMap[user.role]}.</p>
                     </div>
-                     <div className="flex items-center space-x-4">
+                     <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
-                        <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-500 hover:text-red-700 p-2 rounded-lg hover:bg-red-50 dark:hover:bg-red-900/20"><LogOut className="w-4 h-4 mr-1" /> Sair</button>
+                        <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"><LogOut className="w-4 h-4 mr-1.5" /> Sair</button>
                     </div>
                 </header>
 
-                <div className="flex border-b mb-6 dark:border-slate-700">
-                    <button onClick={() => setActiveTab('users')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'users' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Users className="w-4 h-4 mr-2" /> Gestão de Usuários</button>
-                    <button onClick={() => setActiveTab('units')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'units' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><Home className="w-4 h-4 mr-2" /> Gestão de Unidades</button>
-                    <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-6 text-sm font-medium transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 border-b-2 border-blue-600 dark:border-blue-400' : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-slate-800'}`}><MessageSquare className="w-4 h-4 mr-2" /> Caixa de Mensagens</button>
+                <div className="border-b mb-6 dark:border-gray-800">
+                    <nav className="flex space-x-2">
+                         <button onClick={() => setActiveTab('users')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'users' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Users className="w-4 h-4 mr-2" /> Gestão de Usuários</button>
+                         <button onClick={() => setActiveTab('units')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'units' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Home className="w-4 h-4 mr-2" /> Gestão de Unidades</button>
+                         <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><MessageSquare className="w-4 h-4 mr-2" /> Mensagem Global</button>
+                    </nav>
                 </div>
 
                 {activeTab === 'users' && <UserManagement />}
@@ -1202,24 +1162,21 @@ const RHAdminDashboard = () => {
     );
 };
 
+const Footer = () => {
+    return (
+        <footer className="w-full py-4 mt-auto text-center border-t border-slate-200 dark:border-gray-800">
+            <p className="text-xs text-slate-500 dark:text-slate-400">
+                © Criado por ISAAC.J.S.B | Desenvolvido por GIULIANO.L & HENRIQUE.B
+            </p>
+        </footer>
+    );
+};
 
-// --- ///////////////////////////////////////////// ---
-// --- /src/App.js (Componente Principal)            ---
-// --- ///////////////////////////////////////////// ---
 const AppContent = () => {
     const { user, role, isLoading } = useAuthContext();
-    const { setMessage: setGlobalMessage } = useGlobalMessage();
 
     if (isLoading) {
         return <LoadingScreen />;
-    }
-
-    if (!user) {
-        return (
-            <div className="flex flex-col items-center justify-center min-h-screen p-4 bg-gray-100 dark:bg-slate-900 transition-colors duration-300">
-                <LoginScreen />
-            </div>
-        );
     }
     
     const dashboardMap = {
@@ -1229,8 +1186,15 @@ const AppContent = () => {
     };
 
     return (
-        <div className="bg-gray-100 dark:bg-slate-900 text-slate-800 dark:text-slate-200 min-h-screen">
-            {dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>}
+        <div className="flex flex-col min-h-screen bg-slate-50 dark:bg-gray-950 text-slate-800 dark:text-slate-200 antialiased">
+            <main className={`flex-grow ${!user ? 'flex items-center justify-center p-4 bg-dots' : ''}`}>
+                {!user ? (
+                    <LoginScreen />
+                ) : (
+                    dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
+                )}
+            </main>
+            <Footer />
         </div>
     );
 }
