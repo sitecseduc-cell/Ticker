@@ -32,7 +32,7 @@ try {
         auth = getAuth(app);
         db = getFirestore(app, '(default)');
         isFirebaseInitialized = true;
-        appId = firebaseConfig.appId;
+        appId = firebaseConfig.projectId;
     } else {
         console.warn("Configuração do Firebase não encontrada. Usando modo de demonstração.");
         app = {}; auth = {}; db = null;
