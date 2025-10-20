@@ -24,6 +24,7 @@ const firebaseConfig = {
 
 let app, auth, db;
 let isFirebaseInitialized = false;
+let appId = 'secretaria-educacao-ponto-demo'; // Valor padrão
 
 try {
     if (firebaseConfig.apiKey) {
@@ -31,6 +32,7 @@ try {
         auth = getAuth(app);
         db = getFirestore(app);
         isFirebaseInitialized = true;
+        appId = firebaseConfig.appId;
     } else {
         console.warn("Configuração do Firebase não encontrada. Usando modo de demonstração.");
         app = {}; auth = {}; db = null;
@@ -39,9 +41,6 @@ try {
     console.error("Erro ao inicializar o Firebase:", error);
     app = {}; auth = {}; db = null;
 }
-const appId = firebaseConfig.appId || 'secretaria-educacao-ponto-demo';
-
-
 // --- Constantes ---
 const STATUS_COLORS = {
     entrada: 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
