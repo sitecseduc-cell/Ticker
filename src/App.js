@@ -12,17 +12,21 @@ import {
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon
 } from 'lucide-react';
 
-// --- /src/firebase/config.js (Simulado) ---
-const appId = typeof __app_id !== 'undefined' ? __app_id : 'secretaria-educacao-ponto-demo';
-const firebaseConfigJSON = typeof __firebase_config !== 'undefined' ? __firebase_config : null;
-
+// --- /src/firebase/config.js (Corrigido) ---
+const firebaseConfig = {
+  apiKey: process.env.REACT_APP_apiKey,
+  authDomain: process.env.REACT_APP_authDomain,
+  projectId: process.env.REACT_APP_projectId,
+  storageBucket: process.env.REACT_APP_storageBucket,
+  messagingSenderId: process.env.REACT_APP_messagingSenderId,
+  appId: process.env.REACT_APP_appId
+};
 
 let app, auth, db;
 let isFirebaseInitialized = false;
 
 try {
-    if (firebaseConfigJSON) {
-        const firebaseConfig = JSON.parse(firebaseConfigJSON);
+    if (firebaseConfig.apiKey) {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
@@ -35,6 +39,7 @@ try {
     console.error("Erro ao inicializar o Firebase:", error);
     app = {}; auth = {}; db = null;
 }
+const appId = firebaseConfig.appId || 'secretaria-educacao-ponto-demo';
 
 
 // --- Constantes ---
