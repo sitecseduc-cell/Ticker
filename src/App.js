@@ -30,7 +30,7 @@ try {
     if (firebaseConfig.apiKey) {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
-        db = getFirestore(app);
+        db = getFirestore(app, '(default)');
         isFirebaseInitialized = true;
         appId = firebaseConfig.appId;
     } else {
