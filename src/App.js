@@ -41,6 +41,7 @@ try {
     console.error("Erro ao inicializar o Firebase:", error);
     app = {}; auth = {}; db = null;
 }
+
 // --- Constantes ---
 const STATUS_COLORS = {
     entrada: 'text-emerald-700 bg-emerald-100 dark:bg-emerald-900/50 dark:text-emerald-400 border border-emerald-200 dark:border-emerald-800',
@@ -143,7 +144,7 @@ const AuthProvider = ({ children }) => {
         });
         return () => unsubscribe();
     }, []);
-    
+
     const handleSignUp = useCallback(async (nome, email, matricula, password) => {
         if (!isFirebaseInitialized) {
             throw new Error('O cadastro não está disponível no modo de demonstração.');
@@ -194,20 +195,20 @@ const AuthProvider = ({ children }) => {
             const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
             const querySnapshot = await getDocs(q);
-    
+
             if (querySnapshot.empty) {
                 throw new Error("Matrícula ou senha incorretos.");
             }
-    
+
             const userDoc = querySnapshot.docs[0];
             const userData = userDoc.data();
             const userEmail = userData.email; 
-    
+
             if (!userEmail) {
                 console.error("O documento do usuário não possui o campo de email:", userDoc.id);
                 throw new Error("Falha no login. O perfil do usuário está incompleto.");
             }
-    
+
             await signInWithEmailAndPassword(auth, userEmail, password);
 
         } catch(error) {
@@ -389,7 +390,7 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
             setLoading(false);
         }
     };
-    
+
     const onForgotPasswordClick = (e) => {
         e.preventDefault();
         onSwitchToForgotPassword();
@@ -1324,7 +1325,7 @@ const AppContent = () => {
     if (isLoading) {
         return <LoadingScreen />;
     }
-    
+
     const dashboardMap = {
         servidor: <ServidorDashboard />,
         gestor: <GestorDashboard />,
@@ -1367,4 +1368,3 @@ export default function App() {
         </ThemeProvider>
     );
 }
-
