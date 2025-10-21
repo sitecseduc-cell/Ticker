@@ -111,7 +111,7 @@ const AuthProvider = ({ children }) => {
             });
             return;
         }
-        const q = query(collection(db, `/artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
+        const q = query(collection(db, `artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const units = {};
             snapshot.forEach(doc => units[doc.id] = doc.data());
@@ -129,7 +129,7 @@ const AuthProvider = ({ children }) => {
 
         const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
             if (firebaseUser) {
-                const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, firebaseUser.uid);
+                const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION, firebaseUser.uid);
                 const userSnap = await getDoc(userDocRef);
                 if (userSnap.exists()) {
                     setUser({ uid: firebaseUser.uid, ...userSnap.data() });
@@ -152,7 +152,7 @@ const AuthProvider = ({ children }) => {
 
         try {
             // Check if matricula already exists
-            const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
+            const usersRef = collection(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
             const querySnapshot = await getDocs(q);
 
@@ -165,7 +165,7 @@ const AuthProvider = ({ children }) => {
             const user = userCredential.user;
 
             // Save user details in Firestore
-            const userDocRef = doc(db, 'artifacts', appId, USER_COLLECTION, user.uid);
+            const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION, user.uid);
             await setDoc(userDocRef, {
                 nome,
                 email,
@@ -192,7 +192,7 @@ const AuthProvider = ({ children }) => {
         }
 
         try {
-            const usersRef = collection(db, 'artifacts', appId, USER_COLLECTION);
+            const usersRef = collection(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION);
             const q = query(usersRef, where("matricula", "==", matricula));
             const querySnapshot = await getDocs(q);
 
@@ -960,7 +960,7 @@ const UserManagement = () => {
     const [userToDelete, setUserToDelete] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
 
-    const usersCollectionPath = `/artifacts/${appId}/${USER_COLLECTION}`;
+    const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
