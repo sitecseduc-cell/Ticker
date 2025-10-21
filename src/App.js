@@ -30,7 +30,8 @@ try {
     if (firebaseConfig.apiKey) {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
-        db = getFirestore(app, '(default)');
+        // CORREÇÃO APLICADA AQUI
+        db = getFirestore(app); 
         isFirebaseInitialized = true;
         appId = firebaseConfig.projectId;
     } else {
@@ -640,8 +641,8 @@ const ServidorDashboard = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
 
-    const pointCollectionPath = useMemo(() => `/artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
-    const solicitacoesCollectionPath = useMemo(() => `/artifacts/${appId}/public/data/solicitacoes`, []);
+    const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
+    const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
     useEffect(() => {
@@ -835,7 +836,7 @@ const GestorDashboard = () => {
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
 
-    const solicitacoesCollectionPath = useMemo(() => `/artifacts/${appId}/public/data/solicitacoes`, []);
+    const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
     useEffect(() => {
@@ -1149,7 +1150,7 @@ const UnitManagement = () => {
     const [unitToEdit, setUnitToEdit] = useState(null);
     const [unitToDelete, setUnitToDelete] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
-    const unitCollectionPath = `/artifacts/${appId}/public/data/${UNIT_COLLECTION}`;
+    const unitCollectionPath = `artifacts/${appId}/public/data/${UNIT_COLLECTION}`;
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
@@ -1236,7 +1237,7 @@ const MessageBoxForAllUsers = () => {
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
-    const messagesCollectionPath = `/artifacts/${appId}/public/data/global_messages`;
+    const messagesCollectionPath = `artifacts/${appId}/public/data/global_messages`;
 
     const handleSendMessage = async (e) => {
         e.preventDefault();
