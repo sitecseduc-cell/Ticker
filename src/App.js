@@ -6,6 +6,8 @@ import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
     addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit
 } from 'firebase/firestore';
+// IMPORTAÇÕES DO STORAGE
+import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
@@ -24,7 +26,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_appId
 };
 
-let app, auth, db;
+let app, auth, db, storage; // ADICIONADO storage
 let isFirebaseInitialized = false;
 let appId = 'secretaria-educacao-ponto-demo'; // Valor padrão
 
@@ -33,15 +35,16 @@ try {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
+        storage = getStorage(app); // INICIALIZADO storage
         isFirebaseInitialized = true;
-        appId = firebaseConfig.appId; // Corrigido para usar appId
+        appId = firebaseConfig.appId;
     } else {
         console.warn("Configuração do Firebase não encontrada. Usando modo de demonstração.");
-        app = {}; auth = {}; db = null;
+        app = {}; auth = {}; db = null; storage = null;
     }
 } catch (error) {
     console.error("Erro ao inicializar o Firebase:", error);
-    app = {}; auth = {}; db = null;
+    app = {}; auth = {}; db = null; storage = null;
 }
 
 // --- Constantes ---
@@ -184,19 +187,15 @@ const AuthProvider = ({ children }) => {
         }
     }, []);
 
-    // ##### FUNÇÃO DE LOGIN MODIFICADA #####
     const handleLogin = useCallback(async (email, password) => {
         if (!isFirebaseInitialized) {
             throw new Error('Email ou senha incorretos.');
         }
 
         try {
-            // A autenticação agora é feita diretamente com o Firebase Auth
             await signInWithEmailAndPassword(auth, email, password);
-            // O onAuthStateChanged vai cuidar de buscar os dados do Firestore e atualizar o estado do usuário
         } catch(error) {
              console.error("Firebase login failed:", error);
-             // Mensagem de erro genérica para segurança
              throw new Error("Email ou senha incorretos.");
         }
     }, []);
@@ -232,7 +231,8 @@ const AuthProvider = ({ children }) => {
         handleSignUp,
         handleForgotPassword,
         db,
-        auth
+        auth,
+        storage // ADICIONADO storage AO CONTEXTO
     }), [user, isLoading, unidades, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -336,31 +336,58 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isLoad
     );
 };
 
+// --- *** ATUALIZADO *** FileViewerModal ---
 const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     if (!isOpen) return null;
+
+    // Verifica se o arquivo é uma imagem pela extensão
+    const isImage = fileUrl && /\.(jpe?g|png|gif|webp)$/i.test(fileName || fileUrl);
+
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in" onClick={onClose}>
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Visualizar Anexo</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Nome do arquivo: {fileName}</p>
-                <div className="mt-4 p-4 border rounded-lg text-center bg-slate-50 dark:bg-gray-800 dark:border-gray-700">
-                    <p className="font-semibold dark:text-slate-200">Visualização de anexo simulada.</p>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">Em um ambiente de produção, o arquivo seria exibido aqui.</p>
-                    <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-blue-600 hover:underline text-xs break-all">
-                        URL simulada: {fileUrl}
-                    </a>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 break-all">Arquivo: {fileName || 'Arquivo'}</p>
+                
+                <div className="mt-4 p-4 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 min-h-[200px] flex items-center justify-center">
+                    {isImage ? (
+                        // Se for imagem, exibe
+                        <img 
+                            src={fileUrl} 
+                            alt={`Anexo ${fileName}`} 
+                            className="max-w-full max-h-[400px] rounded-md" 
+                            onError={(e) => { e.target.onerror = null; e.target.outerHTML = '<p class="text-red-500">Erro ao carregar imagem.</p>'; }}
+                        />
+                    ) : (
+                        // Se não for (PDF, DOCX, etc.), mostra ícone e botão de download
+                        <div className="text-center">
+                            <FileText className="w-16 h-16 text-slate-400 mx-auto" />
+                            <p className="font-semibold dark:text-slate-200 mt-2">Não é possível pré-visualizar este arquivo.</p>
+                            <p className="text-sm text-slate-600 dark:text-slate-300">Você pode baixá-lo para visualizar.</p>
+                            <a 
+                                href={fileUrl} 
+                                target="_blank" 
+                                rel="noopener noreferrer" 
+                                download={fileName} // Sugere o nome original para download
+                                className="mt-4 inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
+                            >
+                                Baixar Arquivo
+                            </a>
+                        </div>
+                    )}
                 </div>
-                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
+                
+                <button onClick={onClose} className="mt-6 w-full py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition">Fechar</button>
             </div>
         </div>
     );
 };
 
-// ##### TELA DE LOGIN MODIFICADA #####
+
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const [email, setEmail] = useState(''); // Mudado de 'matricula' para 'email'
+    const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
@@ -368,7 +395,7 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            await handleLogin(email, password); // Passando 'email' em vez de 'matricula'
+            await handleLogin(email, password);
         } catch (error) {
             setGlobalMessage({ type: 'error', title: 'Falha no Login', message: error.message });
         } finally {
@@ -392,7 +419,6 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
                 <p className="text-slate-500 dark:text-slate-400">Acesse sua conta para continuar.</p>
             </div>
             <form onSubmit={onLogin} className="space-y-4">
-                 {/* Campo de input alterado para 'email' */}
                  <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
@@ -422,7 +448,7 @@ const SignUpScreen = ({ onSwitchToLogin }) => {
         try {
             await handleSignUp(nome, email, matricula, password);
             setGlobalMessage({ type: 'success', title: 'Cadastro Realizado!', message: 'Sua conta foi criada com sucesso. Faça o login para continuar.' });
-            onSwitchToLogin(); // Switch back to login screen on success
+            onSwitchToLogin();
         } catch (error) {
             setGlobalMessage({ type: 'error', title: 'Falha no Cadastro', message: error.message });
         } finally {
@@ -519,8 +545,9 @@ const formatDuration = (ms) => {
     return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
+// --- *** ATUALIZADO *** SolicitationModal ---
 const SolicitationModal = ({ isOpen, onClose }) => {
-    const { user, db } = useAuthContext();
+    const { user, db, storage } = useAuthContext(); // PEGUE O storage DO CONTEXTO
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [formData, setFormData] = useState({
         tipo: 'abono',
@@ -546,8 +573,17 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 
         try {
             let anexoUrl = '';
+            let anexoNome = '';
             if (formData.anexoFile) {
-                anexoUrl = `simulated://storage/${user.matricula}/${Date.now()}_${formData.anexoFile.name}`;
+                // --- LÓGICA DE UPLOAD REAL ---
+                const file = formData.anexoFile;
+                anexoNome = file.name;
+                // Caminho no Storage: anexos/{UID_DO_USUARIO}/{timestamp}_{nome_do_arquivo}
+                const storageRef = ref(storage, `anexos/${user.uid}/${Date.now()}_${anexoNome}`);
+                
+                const snapshot = await uploadBytes(storageRef, file);
+                anexoUrl = await getDownloadURL(snapshot.ref);
+                // --- FIM DA LÓGICA DE UPLOAD ---
             }
 
             await addDoc(collection(db, solicitationCollectionPath), {
@@ -558,7 +594,8 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 tipo: formData.tipo,
                 dataOcorrencia: formData.dataOcorrencia,
                 justificativaTexto: formData.justificativaTexto,
-                anexoUrl,
+                anexoUrl: anexoUrl, // Salva a URL real do Firebase Storage
+                anexoNome: anexoNome, // Salva o nome original do arquivo
                 status: 'pendente',
                 createdAt: new Date(),
             });
@@ -569,7 +606,14 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 message: `Sua solicitação de ${formData.tipo} foi enviada com sucesso.`
             });
             onClose();
+            setFormData({ // Limpa o formulário
+                tipo: 'abono',
+                dataOcorrencia: new Date().toISOString().split('T')[0],
+                justificativaTexto: '',
+                anexoFile: null,
+            });
         } catch (error) {
+            console.error("Erro ao enviar solicitação:", error);
             setGlobalMessage({ type: 'error', title: 'Erro de Submissão', message: `Falha ao enviar: ${error.message}` });
         } finally {
             setLoading(false);
@@ -813,6 +857,7 @@ const ServidorDashboard = () => {
     );
 };
 
+// --- *** ATUALIZADO *** GestorDashboard ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -820,12 +865,11 @@ const GestorDashboard = () => {
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
 
-    // --- Estados para os registros da unidade ---
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
     
-    // --- NOVOS STATES PARA OS FILTROS ---
+    // States para os filtros
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all'); // 'all', 'null', ou um ID de unidade
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -836,7 +880,6 @@ const GestorDashboard = () => {
     useEffect(() => {
         if (!isFirebaseInitialized) return;
         
-        // Query busca TODAS as solicitações (para gestor/coordenador)
         const q = query(
             collection(db, solicitacoesCollectionPath),
             orderBy('createdAt', 'desc')
@@ -872,7 +915,7 @@ const GestorDashboard = () => {
                     const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
                     const qPontos = query(collection(db, pointCollectionPath), 
                                           orderBy('timestamp', 'desc'), 
-                                          limit(10)); // Buscamos os 10 mais recentes
+                                          limit(10)); 
                     
                     const pontosSnapshot = await getDocs(qPontos);
                     pontosMap[servidor.id] = pontosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -911,32 +954,29 @@ const GestorDashboard = () => {
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
 
-    // --- LÓGICA DE FILTRAGEM (useMemo) ---
-    // Filtra os servidores com base nos states de filtro e busca
+    // Lógica de filtragem
     const filteredServidores = useMemo(() => {
         return servidoresDaUnidade
             .filter(servidor => {
                 // Filtro de Unidade
-                if (selectedUnidadeId === 'all') return true; // Mostra todos
-                if (selectedUnidadeId === 'null') return !servidor.unidadeId; // Mostra "Sem Unidade"
-                return servidor.unidadeId === selectedUnidadeId; // Mostra unidade específica
+                if (selectedUnidadeId === 'all') return true; 
+                if (selectedUnidadeId === 'null') return !servidor.unidadeId; 
+                return servidor.unidadeId === selectedUnidadeId; 
             })
             .filter(servidor => {
                 // Filtro de Busca
-                if (searchTerm.trim() === '') return true; // Se a busca está vazia, mostra todos
+                if (searchTerm.trim() === '') return true; 
                 const nome = servidor.nome?.toLowerCase() || '';
                 const matricula = servidor.matricula || '';
                 const termo = searchTerm.toLowerCase();
                 return nome.includes(termo) || matricula.includes(termo);
             });
     }, [servidoresDaUnidade, selectedUnidadeId, searchTerm]);
-    // --- FIM DA LÓGICA DE FILTRAGEM ---
 
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
 
         try {
-            // --- LÓGICA DO PDF ATUALIZADA PARA USAR OS SERVIDORES FILTRADOS ---
             if (filteredServidores.length === 0) {
                  setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
                  return;
@@ -944,7 +984,6 @@ const GestorDashboard = () => {
 
             const doc = new jsPDF();
             
-            // Define o título do PDF com base no filtro
             let titulo = 'Relatório Geral de Servidores';
             if (selectedUnidadeId !== 'all' && selectedUnidadeId !== 'null') {
                 titulo = `Relatório da Unidade: ${unidades[selectedUnidadeId]?.name}`;
@@ -958,7 +997,6 @@ const GestorDashboard = () => {
 
             const corpoTabela = [];
 
-            // 2. Buscar TODOS os pontos de cada servidor FILTRADO
             for (const servidor of filteredServidores) {
                 const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
                 const qPontos = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc')); 
@@ -973,7 +1011,6 @@ const GestorDashboard = () => {
                 if (pontosSnapshot.empty) {
                     corpoTabela.push([{ content: 'Nenhum registro encontrado.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
                 } else {
-                    // 3. Formatar os dados para a tabela
                     pontosSnapshot.docs.forEach(pointDoc => {
                         const ponto = pointDoc.data();
                         corpoTabela.push([
@@ -985,7 +1022,6 @@ const GestorDashboard = () => {
                 }
             }
 
-            // 4. Gerar a tabela no PDF
             doc.autoTable({
                 startY: 30,
                 head: [['Data', 'Tipo', 'Hora']],
@@ -994,7 +1030,6 @@ const GestorDashboard = () => {
                 headStyles: { fillColor: [22, 160, 133] },
             });
 
-            // 5. Salvar o arquivo
             doc.save(`relatorio_pontos.pdf`);
 
         } catch (error) {
@@ -1003,7 +1038,17 @@ const GestorDashboard = () => {
         }
     };
 
-    const getFileNameFromUrl = (url) => url.substring(url.lastIndexOf('/') + 1);
+    const getFileNameFromUrl = (url) => {
+         try {
+             // Tenta decodificar a URL (para nomes com espaços, etc.)
+             const decodedUrl = decodeURIComponent(url);
+             // Pega a parte depois da última '/'
+             return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1);
+         } catch (e) {
+             // Fallback para URLs malformadas ou simuladas
+             return url.substring(url.lastIndexOf('/') + 1);
+         }
+    };
 
     return (
         <div className="p-4 md:p-8">
@@ -1051,7 +1096,7 @@ const GestorDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                {/* --- ATUALIZAÇÃO: Filtrando solicitações com base nos servidores filtrados --- */}
+                                {/* Filtra solicitações com base nos servidores filtrados */ }
                                 {solicitacoes
                                   .filter(sol => filteredServidores.some(s => s.id === sol.requesterId))
                                   .map(sol => (
@@ -1065,7 +1110,11 @@ const GestorDashboard = () => {
                                         <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
                                              <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
                                             {sol.anexoUrl &&
-                                                <button onClick={() => setViewingFile({ url: sol.anexoUrl, name: getFileNameFromUrl(sol.anexoUrl) })} className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
+                                                <button onClick={() => setViewingFile({ 
+                                                            url: sol.anexoUrl, 
+                                                            name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl) // Usa o nome salvo
+                                                        })} 
+                                                        className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
                                                     <File className="w-3 h-3 mr-1" /> Ver Anexo
                                                 </button>
                                             }
@@ -1098,7 +1147,7 @@ const GestorDashboard = () => {
                         Registros de Ponto Recentes (Todos Servidores)
                     </h2>
 
-                    {/* --- INÍCIO DOS NOVOS FILTROS --- */}
+                    {/* --- FILTROS ADICIONADOS --- */}
                     <div className="flex flex-col sm:flex-row gap-4 mb-6">
                         <div className="flex-1">
                             <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
@@ -1130,14 +1179,12 @@ const GestorDashboard = () => {
                             </div>
                         </div>
                     </div>
-                    {/* --- FIM DOS NOVOS FILTROS --- */}
-
 
                     {loadingRegistros ? (
                         <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
                     ) : (
                         <div className="space-y-6">
-                            {/* --- ATUALIZAÇÃO: Usando filteredServidores --- */}
+                            {/* Usa os servidores filtrados */}
                             {filteredServidores.length === 0 ? (
                                 <p className="text-slate-500 dark:text-slate-400 text-center py-4">
                                     {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado para esta unidade.'}
@@ -1230,7 +1277,7 @@ const UserManagement = () => {
             const userDocRef = doc(db, usersCollectionPath, editingUser.id);
             await updateDoc(userDocRef, {
                 role: editingUser.role,
-                unidadeId: editingUser.unidadeId,
+                unidadeId: editingUser.unidadeId || null, // Garante 'null' se "Sem Unidade" for escolhido
                 nome: editingUser.nome,
                 matricula: editingUser.matricula
             });
@@ -1338,7 +1385,7 @@ const UserManagement = () => {
                             <div>
                                 <label className="text-sm font-medium dark:text-slate-300">Unidade</label>
                                 <select name="unidadeId" value={editingUser.unidadeId || ''} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                                    <option value="">Sem Unidade</option> {/* Opção para 'null' */}
+                                    <option value="">Sem Unidade</option>
                                     {Object.entries(unidades).map(([id, unit]) => (
                                         <option key={id} value={id}>{unit.name}</option>
                                     ))}
@@ -1506,7 +1553,14 @@ const MessageBoxForAllUsers = () => {
             <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
             <form onSubmit={handleSendMessage} className="space-y-3">
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
+                <textarea value={message} onChange={(e) => setMessage(e.targ
+
+
+
+
+
+
+et.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
                 <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
                      {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
                      {loading ? 'Enviando...' : 'Enviar Mensagem'}
