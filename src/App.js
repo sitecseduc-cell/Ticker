@@ -820,33 +820,38 @@ const GestorDashboard = () => {
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
 
-    // --- INÍCIO DAS NOVAS ADIÇÕES ---
+    // --- Estados para os registros da unidade ---
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
-    // --- FIM DAS NOVAS ADIÇÕES ---
+    
 
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
-    const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
+    
+    // --- CORREÇÃO: Removido 'unidadeNome' daqui, pois o gestor agora vê todas ---
+    // const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
+    // Busca SOLICITAÇÕES
     useEffect(() => {
-        if (!isFirebaseInitialized || !user?.unidadeId) return;
+        if (!isFirebaseInitialized) return;
+        
+        // --- CORREÇÃO: Query agora busca TODAS as solicitações, não apenas da unidadeId ---
         const q = query(
             collection(db, solicitacoesCollectionPath),
-            where('unidadeId', '==', user.unidadeId),
             orderBy('createdAt', 'desc')
         );
+        // --- FIM DA CORREÇÃO ---
+
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setSolicitacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
         return () => unsubscribe();
-    }, [db, solicitacoesCollectionPath, user?.unidadeId]);
+    }, [db, solicitacoesCollectionPath]);
 
-    // --- INÍCIO DO NOVO useEffect ---
-    // Busca servidores e seus registros de ponto recentes
+    // Busca SERVIDORES e seus REGISTROS DE PONTO recentes
     useEffect(() => {
-        if (!isFirebaseInitialized || !user?.unidadeId) {
+        if (!isFirebaseInitialized) {
             setLoadingRegistros(false);
             return;
         }
@@ -854,10 +859,11 @@ const GestorDashboard = () => {
         const fetchRegistros = async () => {
             setLoadingRegistros(true);
             try {
-                // 1. Buscar todos os servidores da unidade do gestor
+                // --- CORREÇÃO: Query agora busca TODOS os servidores, não apenas da unidadeId ---
                 const qServidores = query(collection(db, usersCollectionPath), 
-                                          where('unidadeId', '==', user.unidadeId), 
                                           where('role', '==', 'servidor'));
+                // --- FIM DA CORREÇÃO ---
+                                          
                 const servidoresSnapshot = await getDocs(qServidores);
                 const servidores = servidoresSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setServidoresDaUnidade(servidores);
@@ -888,8 +894,7 @@ const GestorDashboard = () => {
         };
 
         fetchRegistros();
-    }, [db, user?.unidadeId, usersCollectionPath, setGlobalMessage]);
-    // --- FIM DO NOVO useEffect ---
+    }, [db, usersCollectionPath, setGlobalMessage]);
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -908,19 +913,18 @@ const GestorDashboard = () => {
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
 
-    // --- INÍCIO DA NOVA FUNÇÃO PDF ---
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
 
         try {
-            // 1. Buscar os servidores da unidade (reutiliza o state que já buscamos)
             if (servidoresDaUnidade.length === 0) {
-                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado nesta unidade para gerar relatório.' });
+                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado para gerar relatório.' });
                  return;
             }
 
             const doc = new jsPDF();
-            doc.text(`Relatório da Unidade: ${unidadeNome}`, 14, 16);
+            // --- CORREÇÃO: Título do PDF alterado para "Geral" ---
+            doc.text(`Relatório Geral de Servidores`, 14, 16);
             doc.setFontSize(10);
             doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22);
 
@@ -929,12 +933,14 @@ const GestorDashboard = () => {
             // 2. Buscar TODOS os pontos de cada servidor
             for (const servidor of servidoresDaUnidade) {
                 const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
-                // Sem 'limit()' para buscar todos os registros para o PDF
                 const qPontos = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc')); 
                 const pontosSnapshot = await getDocs(qPontos);
+                
+                // Pega o nome da unidade do servidor
+                const unidadeServidor = unidades[servidor.unidadeId]?.name || 'Sem Unidade';
 
                 corpoTabela.push([
-                    { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula})`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
+                    { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula}) - Unidade: ${unidadeServidor}`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
                 ]);
 
                 if (pontosSnapshot.empty) {
@@ -962,14 +968,14 @@ const GestorDashboard = () => {
             });
 
             // 5. Salvar o arquivo
-            doc.save(`relatorio_${unidadeNome.replace(/ /g, '_')}.pdf`);
+            doc.save(`relatorio_geral_servidores.pdf`);
+            // --- FIM DA CORREÇÃO ---
 
         } catch (error) {
             console.error("Erro ao gerar PDF:", error);
             setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível gerar o relatório: ${error.message}` });
         }
     };
-    // --- FIM DA NOVA FUNÇÃO PDF ---
 
     const getFileNameFromUrl = (url) => url.substring(url.lastIndexOf('/') + 1);
 
@@ -982,7 +988,8 @@ const GestorDashboard = () => {
                             <User className="inline-block w-8 h-8 mr-3 text-blue-600" /> Painel do Gestor
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-1">
-                            Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Unidade: {unidadeNome}.
+                            {/* --- CORREÇÃO: Mensagem de boas-vindas não mostra mais a unidade --- */}
+                            Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
                         </p>
                     </div>
                      <div className="flex items-center space-x-3 self-end sm:self-center">
@@ -994,27 +1001,26 @@ const GestorDashboard = () => {
                 </header>
 
                 <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                    {/* --- INÍCIO DA MODIFICAÇÃO (Botão PDF) --- */}
                     <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
                         <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
                             <Mail className="w-5 h-5 mr-2 text-amber-500" />
                             Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
                         </h2>
                         <button
-                            onClick={handleGerarRelatorio} // AQUI ESTÁ O BOTÃO
+                            onClick={handleGerarRelatorio} 
                             className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition w-full sm:w-auto"
                         >
                             <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de Pontos
                         </button>
                     </div>
-                    {/* --- FIM DA MODIFICAÇÃO --- */}
-
 
                     <div className="overflow-x-auto">
                         <table className="min-w-full">
                             <thead className="border-b border-slate-200 dark:border-gray-800">
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
+                                    {/* --- CORREÇÃO: Adicionando Unidade à tabela --- */}
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unidade</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
@@ -1024,6 +1030,8 @@ const GestorDashboard = () => {
                                 {solicitacoes.map(sol => (
                                     <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                         <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
+                                        {/* --- CORREÇÃO: Mostrando a unidade da solicitação --- */}
+                                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
                                         <td className="px-4 py-4">
                                             <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
                                             <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
@@ -1052,17 +1060,16 @@ const GestorDashboard = () => {
                                         </td>
                                     </tr>
                                 ))}
-                                {solicitacoes.length === 0 && <tr><td colSpan="4" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
+                                {solicitacoes.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
                             </tbody>
                         </table>
                     </div>
                 </section>
                 
-                {/* --- INÍCIO DA NOVA SEÇÃO DE REGISTROS --- */}
                 <section className="mt-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                     <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
                         <Clock className="w-5 h-5 mr-2 text-blue-500" />
-                        Registros de Ponto Recentes da Unidade
+                        Registros de Ponto Recentes (Todos Servidores)
                     </h2>
 
                     {loadingRegistros ? (
@@ -1070,12 +1077,15 @@ const GestorDashboard = () => {
                     ) : (
                         <div className="space-y-6">
                             {servidoresDaUnidade.length === 0 ? (
-                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">Nenhum servidor encontrado nesta unidade.</p>
+                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">Nenhum servidor encontrado no sistema.</p>
                             ) : (
                                 servidoresDaUnidade.map(servidor => (
                                     <div key={servidor.id}>
+                                        {/* --- CORREÇÃO: Mostrando a unidade do servidor --- */}
                                         <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Matrícula: {servidor.matricula}</p>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                                            Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
+                                        </p>
                                         <div className="overflow-x-auto border rounded-lg dark:border-gray-800">
                                             <table className="min-w-full">
                                                 <thead className="bg-slate-50 dark:bg-gray-800/50">
@@ -1112,7 +1122,6 @@ const GestorDashboard = () => {
                         </div>
                     )}
                 </section>
-                {/* --- FIM DA NOVA SEÇÃO DE REGISTROS --- */}
 
                 <FileViewerModal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} fileUrl={viewingFile?.url} fileName={viewingFile?.name} />
             </div>
