@@ -824,24 +824,23 @@ const GestorDashboard = () => {
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
-    const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     
+    // --- NOVOS STATES PARA OS FILTROS ---
+    const [selectedUnidadeId, setSelectedUnidadeId] = useState('all'); // 'all', 'null', ou um ID de unidade
+    const [searchTerm, setSearchTerm] = useState('');
 
+    const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
-    
-    // --- CORREÇÃO: Removido 'unidadeNome' daqui, pois o gestor agora vê todas ---
-    // const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
     // Busca SOLICITAÇÕES
     useEffect(() => {
         if (!isFirebaseInitialized) return;
         
-        // --- CORREÇÃO: Query agora busca TODAS as solicitações, não apenas da unidadeId ---
+        // Query busca TODAS as solicitações (para gestor/coordenador)
         const q = query(
             collection(db, solicitacoesCollectionPath),
             orderBy('createdAt', 'desc')
         );
-        // --- FIM DA CORREÇÃO ---
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setSolicitacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -849,7 +848,7 @@ const GestorDashboard = () => {
         return () => unsubscribe();
     }, [db, solicitacoesCollectionPath]);
 
-    // Busca SERVIDORES e seus REGISTROS DE PONTO recentes
+    // Busca TODOS OS SERVIDORES e seus REGISTROS DE PONTO recentes
     useEffect(() => {
         if (!isFirebaseInitialized) {
             setLoadingRegistros(false);
@@ -859,10 +858,9 @@ const GestorDashboard = () => {
         const fetchRegistros = async () => {
             setLoadingRegistros(true);
             try {
-                // --- CORREÇÃO: Query agora busca TODOS os servidores, não apenas da unidadeId ---
+                // 1. Buscar todos os servidores
                 const qServidores = query(collection(db, usersCollectionPath), 
                                           where('role', '==', 'servidor'));
-                // --- FIM DA CORREÇÃO ---
                                           
                 const servidoresSnapshot = await getDocs(qServidores);
                 const servidores = servidoresSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -886,7 +884,7 @@ const GestorDashboard = () => {
                 setGlobalMessage({ 
                     type: 'error', 
                     title: 'Erro de Leitura', 
-                    message: 'Não foi possível carregar os registros de ponto. Verifique as regras de segurança do Firestore.' 
+                    message: `Não foi possível carregar os registros de ponto: ${error.message}`
                 });
             } finally {
                 setLoadingRegistros(false);
@@ -913,30 +911,59 @@ const GestorDashboard = () => {
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
 
+    // --- LÓGICA DE FILTRAGEM (useMemo) ---
+    // Filtra os servidores com base nos states de filtro e busca
+    const filteredServidores = useMemo(() => {
+        return servidoresDaUnidade
+            .filter(servidor => {
+                // Filtro de Unidade
+                if (selectedUnidadeId === 'all') return true; // Mostra todos
+                if (selectedUnidadeId === 'null') return !servidor.unidadeId; // Mostra "Sem Unidade"
+                return servidor.unidadeId === selectedUnidadeId; // Mostra unidade específica
+            })
+            .filter(servidor => {
+                // Filtro de Busca
+                if (searchTerm.trim() === '') return true; // Se a busca está vazia, mostra todos
+                const nome = servidor.nome?.toLowerCase() || '';
+                const matricula = servidor.matricula || '';
+                const termo = searchTerm.toLowerCase();
+                return nome.includes(termo) || matricula.includes(termo);
+            });
+    }, [servidoresDaUnidade, selectedUnidadeId, searchTerm]);
+    // --- FIM DA LÓGICA DE FILTRAGEM ---
+
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
 
         try {
-            if (servidoresDaUnidade.length === 0) {
-                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado para gerar relatório.' });
+            // --- LÓGICA DO PDF ATUALIZADA PARA USAR OS SERVIDORES FILTRADOS ---
+            if (filteredServidores.length === 0) {
+                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
                  return;
             }
 
             const doc = new jsPDF();
-            // --- CORREÇÃO: Título do PDF alterado para "Geral" ---
-            doc.text(`Relatório Geral de Servidores`, 14, 16);
+            
+            // Define o título do PDF com base no filtro
+            let titulo = 'Relatório Geral de Servidores';
+            if (selectedUnidadeId !== 'all' && selectedUnidadeId !== 'null') {
+                titulo = `Relatório da Unidade: ${unidades[selectedUnidadeId]?.name}`;
+            } else if (selectedUnidadeId === 'null') {
+                titulo = 'Relatório de Servidores Sem Unidade';
+            }
+
+            doc.text(titulo, 14, 16);
             doc.setFontSize(10);
             doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22);
 
             const corpoTabela = [];
 
-            // 2. Buscar TODOS os pontos de cada servidor
-            for (const servidor of servidoresDaUnidade) {
+            // 2. Buscar TODOS os pontos de cada servidor FILTRADO
+            for (const servidor of filteredServidores) {
                 const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
                 const qPontos = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc')); 
                 const pontosSnapshot = await getDocs(qPontos);
                 
-                // Pega o nome da unidade do servidor
                 const unidadeServidor = unidades[servidor.unidadeId]?.name || 'Sem Unidade';
 
                 corpoTabela.push([
@@ -968,8 +995,7 @@ const GestorDashboard = () => {
             });
 
             // 5. Salvar o arquivo
-            doc.save(`relatorio_geral_servidores.pdf`);
-            // --- FIM DA CORREÇÃO ---
+            doc.save(`relatorio_pontos.pdf`);
 
         } catch (error) {
             console.error("Erro ao gerar PDF:", error);
@@ -988,7 +1014,6 @@ const GestorDashboard = () => {
                             <User className="inline-block w-8 h-8 mr-3 text-blue-600" /> Painel do Gestor
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-1">
-                            {/* --- CORREÇÃO: Mensagem de boas-vindas não mostra mais a unidade --- */}
                             Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
                         </p>
                     </div>
@@ -1019,7 +1044,6 @@ const GestorDashboard = () => {
                             <thead className="border-b border-slate-200 dark:border-gray-800">
                                 <tr>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
-                                    {/* --- CORREÇÃO: Adicionando Unidade à tabela --- */}
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unidade</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
@@ -1027,10 +1051,12 @@ const GestorDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                {solicitacoes.map(sol => (
+                                {/* --- ATUALIZAÇÃO: Filtrando solicitações com base nos servidores filtrados --- */}
+                                {solicitacoes
+                                  .filter(sol => filteredServidores.some(s => s.id === sol.requesterId))
+                                  .map(sol => (
                                     <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                         <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
-                                        {/* --- CORREÇÃO: Mostrando a unidade da solicitação --- */}
                                         <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
                                         <td className="px-4 py-4">
                                             <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
@@ -1072,16 +1098,53 @@ const GestorDashboard = () => {
                         Registros de Ponto Recentes (Todos Servidores)
                     </h2>
 
+                    {/* --- INÍCIO DOS NOVOS FILTROS --- */}
+                    <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                        <div className="flex-1">
+                            <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
+                            <select
+                                id="unitFilter"
+                                value={selectedUnidadeId}
+                                onChange={(e) => setSelectedUnidadeId(e.target.value)}
+                                className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            >
+                                <option value="all">Todas as Unidades</option>
+                                <option value="null">Sem Unidade</option>
+                                {Object.entries(unidades).map(([id, unit]) => (
+                                    <option key={id} value={id}>{unit.name}</option>
+                                ))}
+                            </select>
+                        </div>
+                        <div className="flex-1">
+                            <label htmlFor="searchFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Buscar Servidor</label>
+                            <div className="relative">
+                                <input
+                                    type="text"
+                                    id="searchFilter"
+                                    placeholder="Buscar por nome ou matrícula..."
+                                    value={searchTerm}
+                                    onChange={(e) => setSearchTerm(e.target.value)}
+                                    className="w-full p-2 border rounded-lg pl-10 bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                />
+                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                            </div>
+                        </div>
+                    </div>
+                    {/* --- FIM DOS NOVOS FILTROS --- */}
+
+
                     {loadingRegistros ? (
                         <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
                     ) : (
                         <div className="space-y-6">
-                            {servidoresDaUnidade.length === 0 ? (
-                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">Nenhum servidor encontrado no sistema.</p>
+                            {/* --- ATUALIZAÇÃO: Usando filteredServidores --- */}
+                            {filteredServidores.length === 0 ? (
+                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">
+                                    {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado para esta unidade.'}
+                                </p>
                             ) : (
-                                servidoresDaUnidade.map(servidor => (
+                                filteredServidores.map(servidor => (
                                     <div key={servidor.id}>
-                                        {/* --- CORREÇÃO: Mostrando a unidade do servidor --- */}
                                         <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
                                         <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
                                             Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
@@ -1274,7 +1337,8 @@ const UserManagement = () => {
                             </div>
                             <div>
                                 <label className="text-sm font-medium dark:text-slate-300">Unidade</label>
-                                <select name="unidadeId" value={editingUser.unidadeId} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                <select name="unidadeId" value={editingUser.unidadeId || ''} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
+                                    <option value="">Sem Unidade</option> {/* Opção para 'null' */}
                                     {Object.entries(unidades).map(([id, unit]) => (
                                         <option key={id} value={id}>{unit.name}</option>
                                     ))}
