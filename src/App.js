@@ -4,13 +4,15 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit
 } from 'firebase/firestore';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon
 } from 'lucide-react';
+import { jsPDF } from 'jspdf';
+import 'jspdf-autotable';
 
 // --- /src/firebase/config.js (Corrigido) ---
 const firebaseConfig = {
@@ -818,6 +820,13 @@ const GestorDashboard = () => {
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
 
+    // --- INÍCIO DAS NOVAS ADIÇÕES ---
+    const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
+    const [pontosDosServidores, setPontosDosServidores] = useState({});
+    const [loadingRegistros, setLoadingRegistros] = useState(true);
+    const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
+    // --- FIM DAS NOVAS ADIÇÕES ---
+
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
@@ -833,6 +842,54 @@ const GestorDashboard = () => {
         });
         return () => unsubscribe();
     }, [db, solicitacoesCollectionPath, user?.unidadeId]);
+
+    // --- INÍCIO DO NOVO useEffect ---
+    // Busca servidores e seus registros de ponto recentes
+    useEffect(() => {
+        if (!isFirebaseInitialized || !user?.unidadeId) {
+            setLoadingRegistros(false);
+            return;
+        }
+
+        const fetchRegistros = async () => {
+            setLoadingRegistros(true);
+            try {
+                // 1. Buscar todos os servidores da unidade do gestor
+                const qServidores = query(collection(db, usersCollectionPath), 
+                                          where('unidadeId', '==', user.unidadeId), 
+                                          where('role', '==', 'servidor'));
+                const servidoresSnapshot = await getDocs(qServidores);
+                const servidores = servidoresSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setServidoresDaUnidade(servidores);
+
+                // 2. Para cada servidor, buscar seus 10 últimos registros de ponto
+                const pontosMap = {};
+                for (const servidor of servidores) {
+                    const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
+                    const qPontos = query(collection(db, pointCollectionPath), 
+                                          orderBy('timestamp', 'desc'), 
+                                          limit(10)); // Buscamos os 10 mais recentes
+                    
+                    const pontosSnapshot = await getDocs(qPontos);
+                    pontosMap[servidor.id] = pontosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                }
+                setPontosDosServidores(pontosMap);
+
+            } catch (error) {
+                console.error("Erro ao buscar registros da unidade:", error);
+                setGlobalMessage({ 
+                    type: 'error', 
+                    title: 'Erro de Leitura', 
+                    message: 'Não foi possível carregar os registros de ponto. Verifique as regras de segurança do Firestore.' 
+                });
+            } finally {
+                setLoadingRegistros(false);
+            }
+        };
+
+        fetchRegistros();
+    }, [db, user?.unidadeId, usersCollectionPath, setGlobalMessage]);
+    // --- FIM DO NOVO useEffect ---
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -850,6 +907,69 @@ const GestorDashboard = () => {
             setLoadingAction(null);
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
+
+    // --- INÍCIO DA NOVA FUNÇÃO PDF ---
+    const handleGerarRelatorio = async () => {
+        setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
+
+        try {
+            // 1. Buscar os servidores da unidade (reutiliza o state que já buscamos)
+            if (servidoresDaUnidade.length === 0) {
+                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado nesta unidade para gerar relatório.' });
+                 return;
+            }
+
+            const doc = new jsPDF();
+            doc.text(`Relatório da Unidade: ${unidadeNome}`, 14, 16);
+            doc.setFontSize(10);
+            doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22);
+
+            const corpoTabela = [];
+
+            // 2. Buscar TODOS os pontos de cada servidor
+            for (const servidor of servidoresDaUnidade) {
+                const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
+                // Sem 'limit()' para buscar todos os registros para o PDF
+                const qPontos = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc')); 
+                const pontosSnapshot = await getDocs(qPontos);
+
+                corpoTabela.push([
+                    { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula})`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
+                ]);
+
+                if (pontosSnapshot.empty) {
+                    corpoTabela.push([{ content: 'Nenhum registro encontrado.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
+                } else {
+                    // 3. Formatar os dados para a tabela
+                    pontosSnapshot.docs.forEach(pointDoc => {
+                        const ponto = pointDoc.data();
+                        corpoTabela.push([
+                            formatDateOnly(ponto.timestamp),
+                            ponto.tipo,
+                            formatTime(ponto.timestamp)
+                        ]);
+                    });
+                }
+            }
+
+            // 4. Gerar a tabela no PDF
+            doc.autoTable({
+                startY: 30,
+                head: [['Data', 'Tipo', 'Hora']],
+                body: corpoTabela,
+                theme: 'striped',
+                headStyles: { fillColor: [22, 160, 133] },
+            });
+
+            // 5. Salvar o arquivo
+            doc.save(`relatorio_${unidadeNome.replace(/ /g, '_')}.pdf`);
+
+        } catch (error) {
+            console.error("Erro ao gerar PDF:", error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível gerar o relatório: ${error.message}` });
+        }
+    };
+    // --- FIM DA NOVA FUNÇÃO PDF ---
 
     const getFileNameFromUrl = (url) => url.substring(url.lastIndexOf('/') + 1);
 
@@ -874,10 +994,21 @@ const GestorDashboard = () => {
                 </header>
 
                 <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                    <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
-                        <Mail className="w-5 h-5 mr-2 text-amber-500" />
-                        Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
-                    </h2>
+                    {/* --- INÍCIO DA MODIFICAÇÃO (Botão PDF) --- */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
+                            <Mail className="w-5 h-5 mr-2 text-amber-500" />
+                            Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
+                        </h2>
+                        <button
+                            onClick={handleGerarRelatorio} // AQUI ESTÁ O BOTÃO
+                            className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition w-full sm:w-auto"
+                        >
+                            <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de Pontos
+                        </button>
+                    </div>
+                    {/* --- FIM DA MODIFICAÇÃO --- */}
+
 
                     <div className="overflow-x-auto">
                         <table className="min-w-full">
@@ -926,6 +1057,62 @@ const GestorDashboard = () => {
                         </table>
                     </div>
                 </section>
+                
+                {/* --- INÍCIO DA NOVA SEÇÃO DE REGISTROS --- */}
+                <section className="mt-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                    <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
+                        <Clock className="w-5 h-5 mr-2 text-blue-500" />
+                        Registros de Ponto Recentes da Unidade
+                    </h2>
+
+                    {loadingRegistros ? (
+                        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
+                    ) : (
+                        <div className="space-y-6">
+                            {servidoresDaUnidade.length === 0 ? (
+                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">Nenhum servidor encontrado nesta unidade.</p>
+                            ) : (
+                                servidoresDaUnidade.map(servidor => (
+                                    <div key={servidor.id}>
+                                        <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Matrícula: {servidor.matricula}</p>
+                                        <div className="overflow-x-auto border rounded-lg dark:border-gray-800">
+                                            <table className="min-w-full">
+                                                <thead className="bg-slate-50 dark:bg-gray-800/50">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                                    {pontosDosServidores[servidor.id]?.length > 0 ? (
+                                                        pontosDosServidores[servidor.id].map(ponto => (
+                                                            <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                                                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
+                                                                <td className="px-4 py-3 text-sm">
+                                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[ponto.tipo] || 'bg-gray-200 text-gray-800'}`}>
+                                                                        {ponto.tipo}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
+                                                            </tr>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">Nenhum registro de ponto recente.</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+                </section>
+                {/* --- FIM DA NOVA SEÇÃO DE REGISTROS --- */}
 
                 <FileViewerModal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} fileUrl={viewingFile?.url} fileName={viewingFile?.name} />
             </div>
