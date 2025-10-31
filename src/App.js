@@ -4,14 +4,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit, Timestamp
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar
+    Calendar, Bell // <-- Ícone do sino adicionado
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -113,6 +113,7 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [unidades, setUnidades] = useState({});
+    const [globalMessages, setGlobalMessages] = useState([]); // <-- NOVO STATE
 
     // Carregar unidades
     useEffect(() => {
@@ -129,6 +130,24 @@ const AuthProvider = ({ children }) => {
             snapshot.forEach(doc => units[doc.id] = doc.data());
             setUnidades(units);
         });
+        return () => unsubscribe();
+    }, []);
+
+    // --- NOVO useEffect: Carregar mensagens globais ---
+    useEffect(() => {
+        if (!isFirebaseInitialized) return;
+
+        const messagesRef = collection(db, `artifacts/${appId}/public/data/global_messages`);
+        const q = query(messagesRef, orderBy('createdAt', 'desc'));
+
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            const messages = snapshot.docs.map(doc => ({
+                id: doc.id,
+                ...doc.data()
+            }));
+            setGlobalMessages(messages);
+        });
+
         return () => unsubscribe();
     }, []);
 
@@ -227,12 +246,14 @@ const AuthProvider = ({ children }) => {
         setUser(null);
     }, []);
 
+    // --- ATUALIZAÇÃO: Adiciona globalMessages ao contexto ---
     const value = useMemo(() => ({
         user,
         role: user?.role || null,
         userId: user?.uid || null,
         isLoading,
         unidades,
+        globalMessages, // <-- ADICIONADO
         handleLogin,
         handleLogout,
         handleSignUp,
@@ -240,7 +261,7 @@ const AuthProvider = ({ children }) => {
         db,
         auth,
         storage 
-    }), [user, isLoading, unidades, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
+    }), [user, isLoading, unidades, globalMessages, handleLogin, handleLogout, handleSignUp, handleForgotPassword]); // <-- globalMessages adicionado à dependência
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -386,20 +407,83 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     );
 };
 
+// --- NOVO COMPONENTE ---
+// Modal para exibir a *nova* mensagem global
+const NewMessageModal = ({ isOpen, onClose, message }) => {
+    if (!isOpen || !message) return null;
 
-// --- *** ATUALIZADO *** LoginScreen ---
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
+                <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                        <Bell className="w-5 h-5 mr-2 text-blue-500" /> Nova Mensagem Global
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
+                </div>
+                <div className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Enviada por: <span className="font-medium">{message.senderName} ({message.senderRole})</span>
+                    </p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                        Em: {formatDateOnly(message.createdAt)} às {formatTime(message.createdAt)}
+                    </p>
+                    <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{message.text}</p>
+                </div>
+                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Entendido</button>
+            </div>
+        </div>
+    );
+};
+
+// --- NOVO COMPONENTE ---
+// Modal para exibir *todas* as mensagens globais
+const GlobalMessagesViewerModal = ({ isOpen, onClose, messages }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 h-[70vh] flex flex-col">
+                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Mensagens Globais</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
+                </div>
+                <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                    {messages.length === 0 ? (
+                        <p className="text-slate-500 dark:text-slate-400 text-center py-8">Nenhuma mensagem global encontrada.</p>
+                    ) : (
+                        messages.map(msg => (
+                            <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
+                                </p>
+                                <p className="text-sm text-slate-500 dark:text-slate-400">
+                                    Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
+                                </p>
+                                <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
+                            </div>
+                        ))
+                    )}
+                </div>
+                <div className="p-4 border-t dark:border-gray-800">
+                    <button onClick={onClose} className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     
-    // --- ATUALIZAÇÃO: Carrega o email e a preferência do localStorage ---
     const [rememberMe, setRememberMe] = useState(() => 
         localStorage.getItem('rememberMePreference') === 'true'
     );
     const [email, setEmail] = useState(() => 
         rememberMe ? localStorage.getItem('rememberedEmail') || '' : ''
     );
-    // --- FIM DA ATUALIZAÇÃO ---
     
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -407,7 +491,6 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const onLogin = async (e) => {
         e.preventDefault();
         
-        // --- ATUALIZAÇÃO: Salva ou remove o email do localStorage ---
         if (rememberMe) {
             localStorage.setItem('rememberedEmail', email);
             localStorage.setItem('rememberMePreference', 'true');
@@ -415,7 +498,6 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
             localStorage.removeItem('rememberedEmail');
             localStorage.removeItem('rememberMePreference');
         }
-        // --- FIM DA ATUALIZAÇÃO ---
 
         setLoading(true);
         try {
@@ -446,7 +528,6 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
                  <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  
-                 {/* --- ATUALIZAÇÃO: Checkbox "Lembrar-me" --- */}
                  <div className="flex items-center space-x-2">
                     <input
                         type="checkbox"
@@ -462,7 +543,6 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
                         Lembrar meu email
                     </label>
                  </div>
-                 {/* --- FIM DA ATUALIZAÇÃO --- */}
 
                  <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
                     {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Entrar'}
@@ -699,8 +779,9 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
+// --- *** ATUALIZADO *** ServidorDashboard ---
 const ServidorDashboard = () => {
-    const { user, userId, db, handleLogout, unidades } = useAuthContext();
+    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext(); // <-- globalMessages
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
@@ -709,11 +790,18 @@ const ServidorDashboard = () => {
     const [solicitacoes, setSolicitacoes] = useState([]);
 
     const [viewDate, setViewDate] = useState(getTodayISOString());
+    
+    // --- NOVOS STATES (Notificações) ---
+    const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const lastReadTimestamp = localStorage.getItem('lastReadTimestamp') || 0;
+    // --- FIM NOVOS STATES ---
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
+    // Este useEffect busca TODOS os pontos
     useEffect(() => {
         if (!isFirebaseInitialized || !userId) return;
         
@@ -731,6 +819,17 @@ const ServidorDashboard = () => {
 
         return () => { unsubPoints(); unsubSolicitations(); };
     }, [db, userId, pointCollectionPath, solicitacoesCollectionPath]);
+
+    // --- NOVO useEffect (Calcula msgs não lidas) ---
+    useEffect(() => {
+        if (globalMessages.length > 0) {
+            const newUnreadCount = globalMessages.filter(
+                msg => msg.createdAt.toDate().getTime() > lastReadTimestamp
+            ).length;
+            setUnreadCount(newUnreadCount);
+        }
+    }, [globalMessages, lastReadTimestamp]);
+    // --- FIM NOVO useEffect ---
 
     const dailySummary = useMemo(() => {
         const summary = {};
@@ -819,6 +918,17 @@ const ServidorDashboard = () => {
         }
     }, [userId, db, pointCollectionPath, user?.unidadeId, nextPointType, setGlobalMessage]);
 
+    // --- NOVA FUNÇÃO ---
+    // Abre o modal de lista e marca as mensagens como lidas
+    const openNotificationList = () => {
+        setIsNotificationListOpen(true);
+        if (globalMessages.length > 0) {
+            localStorage.setItem('lastReadTimestamp', globalMessages[0].createdAt.toDate().getTime().toString());
+        }
+        setUnreadCount(0);
+    };
+    // --- FIM DA NOVA FUNÇÃO ---
+
     const buttonMap = {
         entrada: { label: 'Registrar Entrada', icon: LogIn, color: 'bg-emerald-600 hover:bg-emerald-700' },
         pausa: { label: 'Iniciar Pausa', icon: Pause, color: 'bg-amber-500 hover:bg-amber-600' },
@@ -847,8 +957,23 @@ const ServidorDashboard = () => {
                             Matrícula: {user.matricula} | Unidade: {unidadeNome}
                         </p>
                     </div>
+                    {/* --- ATUALIZAÇÃO: Adiciona o ícone de sino --- */}
                     <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
+                        
+                        <button
+                            onClick={openNotificationList}
+                            className="relative p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label="Ver mensagens"
+                        >
+                            <Bell className="w-5 h-5" />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-600 text-white text-xs font-bold text-center" style={{ fontSize: '0.6rem', lineHeight: '1rem' }}>
+                                    {unreadCount}
+                                </span>
+                            )}
+                        </button>
+
                         <button
                             onClick={handleLogout}
                             className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"
@@ -972,13 +1097,20 @@ const ServidorDashboard = () => {
                 </section>
 
                  <SolicitationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+                 {/* --- NOVO: Renderiza o modal de lista de notificações --- */}
+                 <GlobalMessagesViewerModal 
+                    isOpen={isNotificationListOpen} 
+                    onClose={() => setIsNotificationListOpen(false)} 
+                    messages={globalMessages} 
+                 />
             </div>
         </div>
     );
 };
 
+// --- *** ATUALIZADO *** GestorDashboard ---
 const GestorDashboard = () => {
-    const { user, db, handleLogout, unidades } = useAuthContext();
+    const { user, db, handleLogout, unidades, globalMessages } = useAuthContext(); // <-- globalMessages
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
@@ -991,6 +1123,12 @@ const GestorDashboard = () => {
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDate, setSelectedDate] = useState(getTodayISOString());
+
+    // --- NOVOS STATES (Notificações) ---
+    const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
+    const [unreadCount, setUnreadCount] = useState(0);
+    const lastReadTimestamp = localStorage.getItem('lastReadTimestamp') || 0;
+    // --- FIM NOVOS STATES ---
 
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -1008,6 +1146,17 @@ const GestorDashboard = () => {
         });
         return () => unsubscribe();
     }, [db, solicitacoesCollectionPath]);
+
+    // --- NOVO useEffect (Calcula msgs não lidas) ---
+    useEffect(() => {
+        if (globalMessages.length > 0) {
+            const newUnreadCount = globalMessages.filter(
+                msg => msg.createdAt.toDate().getTime() > lastReadTimestamp
+            ).length;
+            setUnreadCount(newUnreadCount);
+        }
+    }, [globalMessages, lastReadTimestamp]);
+    // --- FIM NOVO useEffect ---
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
@@ -1033,7 +1182,6 @@ const GestorDashboard = () => {
     }, [db, usersCollectionPath, setGlobalMessage]);
 
     useEffect(() => {
-        // Não busca pontos se a lista de servidores estiver vazia
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
             setLoadingRegistros(false); 
             return;
@@ -1178,6 +1326,17 @@ const GestorDashboard = () => {
              return url.substring(url.lastIndexOf('/') + 1);
          }
     };
+    
+    // --- NOVA FUNÇÃO ---
+    // Abre o modal de lista e marca as mensagens como lidas
+    const openNotificationList = () => {
+        setIsNotificationListOpen(true);
+        if (globalMessages.length > 0) {
+            localStorage.setItem('lastReadTimestamp', globalMessages[0].createdAt.toDate().getTime().toString());
+        }
+        setUnreadCount(0);
+    };
+    // --- FIM DA NOVA FUNÇÃO ---
 
     return (
         <div className="p-4 md:p-8">
@@ -1191,8 +1350,23 @@ const GestorDashboard = () => {
                             Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
                         </p>
                     </div>
+                     {/* --- ATUALIZAÇÃO: Adiciona o ícone de sino --- */}
                      <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
+
+                        <button
+                            onClick={openNotificationList}
+                            className="relative p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
+                            aria-label="Ver mensagens"
+                        >
+                            <Bell className="w-5 h-5" />
+                            {unreadCount > 0 && (
+                                <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-600 text-white text-xs font-bold text-center" style={{ fontSize: '0.6rem', lineHeight: '1rem' }}>
+                                    {unreadCount}
+                                </span>
+                            )}
+                        </button>
+
                         <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30">
                             <LogOut className="w-4 h-4 mr-1.5" /> Sair
                         </button>
@@ -1372,6 +1546,12 @@ const GestorDashboard = () => {
                 </section>
 
                 <FileViewerModal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} fileUrl={viewingFile?.url} fileName={viewingFile?.name} />
+                {/* --- NOVO: Renderiza o modal de lista de notificações --- */}
+                <GlobalMessagesViewerModal 
+                    isOpen={isNotificationListOpen} 
+                    onClose={() => setIsNotificationListOpen(false)} 
+                    messages={globalMessages} 
+                />
             </div>
         </div>
     );
@@ -1675,7 +1855,7 @@ const MessageBoxForAllUsers = () => {
                 text: message,
                 senderName: currentUser.nome,
                 senderRole: currentUser.role,
-                createdAt: new Date(),
+                createdAt: new Date(), // <-- Alterado para new Date()
             });
             setGlobalMessage({ type: 'success', title: 'Mensagem Enviada', message: 'Sua mensagem foi enviada para todos os usuários.' });
             setMessage('');
@@ -1746,9 +1926,42 @@ const Footer = () => {
     );
 };
 
+// --- *** ATUALIZADO *** AppContent ---
 const AppContent = () => {
-    const { user, role, isLoading } = useAuthContext();
+    const { user, role, isLoading, globalMessages } = useAuthContext();
     const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
+    
+    // --- NOVOS STATES (Notificação Pop-up) ---
+    const [newestMessage, setNewestMessage] = useState(null);
+    const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
+    // --- FIM NOVOS STATES ---
+
+    // --- NOVO useEffect (Verifica novas mensagens ao logar) ---
+    useEffect(() => {
+        if (!user || globalMessages.length === 0) {
+            return; // Só executa se o usuário estiver logado e houver mensagens
+        }
+
+        const lastReadTimestamp = localStorage.getItem('lastReadTimestamp') || 0;
+        const newestMsg = globalMessages[0];
+        
+        if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
+            setNewestMessage(newestMsg);
+            setIsNewMessageModalOpen(true);
+        }
+        
+    }, [globalMessages, user]); // Depende das mensagens e do usuário
+    
+    // --- NOVA FUNÇÃO ---
+    const handleCloseNewMessageModal = () => {
+        if (newestMessage) {
+            // Marca como lida
+            localStorage.setItem('lastReadTimestamp', newestMessage.createdAt.toDate().getTime().toString());
+        }
+        setIsNewMessageModalOpen(false);
+        setNewestMessage(null);
+    };
+    // --- FIM NOVA FUNÇÃO ---
 
     if (isLoading) {
         return <LoadingScreen />;
@@ -1778,6 +1991,13 @@ const AppContent = () => {
                 ) : (
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
+                
+                {/* --- NOVO: Renderiza o modal de nova mensagem --- */}
+                <NewMessageModal 
+                    isOpen={isNewMessageModalOpen}
+                    onClose={handleCloseNewMessageModal}
+                    message={newestMessage}
+                />
             </main>
             <Footer />
         </div>
