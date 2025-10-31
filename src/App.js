@@ -6,12 +6,12 @@ import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
     addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit
 } from 'firebase/firestore';
-// IMPORTAÇÕES DO STORAGE
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
-    Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon
+    Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
+    Calendar // <-- Adicionado Ícone de Calendário
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -26,7 +26,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_appId
 };
 
-let app, auth, db, storage; // ADICIONADO storage
+let app, auth, db, storage;
 let isFirebaseInitialized = false;
 let appId = 'secretaria-educacao-ponto-demo'; // Valor padrão
 
@@ -35,7 +35,7 @@ try {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
-        storage = getStorage(app); // INICIALIZADO storage
+        storage = getStorage(app);
         isFirebaseInitialized = true;
         appId = firebaseConfig.appId;
     } else {
@@ -539,7 +539,8 @@ const formatDateOnly = (timestamp) => {
     return date.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' });
 };
 const formatDuration = (ms) => {
-    if (ms === 0) return '00:00';
+    // Retorna '00:00' se ms for 0 ou NaN/undefined
+    if (!ms) return '00:00'; 
     const sign = ms < 0 ? '-' : '+';
     const absMs = Math.abs(ms);
     const totalSeconds = Math.round(absMs / 1000);
@@ -553,7 +554,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [formData, setFormData] = useState({
         tipo: 'abono',
-        dataOcorrencia: getTodayISOString(), // Padrão para hoje
+        dataOcorrencia: getTodayISOString(),
         justificativaTexto: '',
         anexoFile: null,
     });
@@ -605,7 +606,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 message: `Sua solicitação de ${formData.tipo} foi enviada com sucesso.`
             });
             onClose();
-            setFormData({ // Limpa o formulário
+            setFormData({
                 tipo: 'abono',
                 dataOcorrencia: getTodayISOString(),
                 justificativaTexto: '',
@@ -659,6 +660,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
+// --- *** ATUALIZADO *** ServidorDashboard ---
 const ServidorDashboard = () => {
     const { user, userId, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -668,12 +670,19 @@ const ServidorDashboard = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
 
+    // --- NOVO STATE ---
+    // Controla o dia que está sendo visualizado no banco de horas e nos registros
+    const [viewDate, setViewDate] = useState(getTodayISOString());
+
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
+    // Este useEffect busca TODOS os pontos, o que é necessário para o cálculo do SALDO TOTAL
     useEffect(() => {
         if (!isFirebaseInitialized || !userId) return;
+        
+        // Busca todos os pontos do usuário para calcular o banco total
         const qPoints = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc'));
         const unsubPoints = onSnapshot(qPoints, (snapshot) => {
             const fetchedPoints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -681,6 +690,7 @@ const ServidorDashboard = () => {
             setLastPoint(fetchedPoints[0] || null);
         });
 
+        // Busca as solicitações do usuário
         const qSolicitations = query(collection(db, solicitacoesCollectionPath), where('requesterId', '==', userId), orderBy('createdAt', 'desc'));
         const unsubSolicitations = onSnapshot(qSolicitations, (snapshot) => {
             setSolicitacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -689,6 +699,7 @@ const ServidorDashboard = () => {
         return () => { unsubPoints(); unsubSolicitations(); };
     }, [db, userId, pointCollectionPath, solicitacoesCollectionPath]);
 
+    // Calcula o resumo diário e o saldo total
     const dailySummary = useMemo(() => {
         const summary = {};
         let totalBalanceMs = 0;
@@ -699,7 +710,9 @@ const ServidorDashboard = () => {
             }
             summary[dateKey].points.push(point);
         });
-        Object.keys(summary).forEach(dateKey => {
+
+        // Loop para calcular o total de cada dia e o saldo total
+        Object.keys(summary).sort().forEach(dateKey => {
             const day = summary[dateKey];
             let totalWorkedMs = 0;
             let currentSegmentStart = null;
@@ -713,12 +726,37 @@ const ServidorDashboard = () => {
                     currentSegmentStart = null;
                 }
             });
+
+            // Se o dia ainda está em andamento (ex: 'entrada' sem 'saida')
+            if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
+                totalWorkedMs += (new Date().getTime() - currentSegmentStart);
+            }
+
             day.totalMs = totalWorkedMs;
-            day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
+            // O saldo do dia só é calculado se o dia estiver finalizado (último ponto é 'saida')
+            const lastPointOfDay = day.points[day.points.length - 1];
+            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+                 day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
+            } else {
+                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
+            }
+
             totalBalanceMs += day.balanceMs;
         });
         return { summary, totalBalanceMs };
     }, [points]);
+
+    // --- NOVO useMemo ---
+    // Pega os dados (pontos e saldo) APENAS para o dia selecionado no calendário
+    const selectedDayData = useMemo(() => {
+        // Precisamos ajustar a data para comparar com as chaves do 'summary'
+        // O input 'viewDate' é YYYY-MM-DD. Precisamos converter para DD/MM/YYYY
+        const dateObj = new Date(viewDate);
+        dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset()); // Corrige fuso
+        const dateKey = formatDateOnly(dateObj);
+        
+        return dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
+    }, [dailySummary.summary, viewDate]);
 
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
@@ -764,6 +802,12 @@ const ServidorDashboard = () => {
         finished: { label: 'Expediente Finalizado', icon: CheckCircle, color: 'bg-slate-400' },
     };
     const currentButton = buttonMap[nextPointType];
+    
+    // --- LÓGICA ATUALIZADA ---
+    // Saldo do dia selecionado (para o card principal)
+    const selectedDayBalanceMs = selectedDayData.balanceMs;
+    // Saldo total (para o texto pequeno)
+    const totalBalanceMs = dailySummary.totalBalanceMs;
 
     return (
         <div className="p-4 md:p-8">
@@ -793,6 +837,7 @@ const ServidorDashboard = () => {
                     </div>
                 </header>
 
+                {/* --- GRID PRINCIPAL ATUALIZADO --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="md:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                        <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100">Registrar Ponto</h2>
@@ -808,15 +853,74 @@ const ServidorDashboard = () => {
                             </button>
                         </div>
                     </div>
-                     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800 flex flex-col justify-center">
-                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Banco de Horas</p>
-                         <p className={`text-4xl font-bold mt-1 ${dailySummary.totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {formatDuration(dailySummary.totalBalanceMs)}
+                     {/* --- CARD DE BANCO DE HORAS ATUALIZADO --- */}
+                     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                         <div className="flex justify-between items-center mb-2">
+                             <label htmlFor="banco-date" className="text-sm font-medium text-slate-500 dark:text-slate-400">Banco de Horas do Dia:</label>
+                             <input 
+                                type="date"
+                                id="banco-date"
+                                value={viewDate}
+                                onChange={(e) => setViewDate(e.target.value)}
+                                className="p-1 text-sm border-none rounded-lg bg-slate-100 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            />
+                         </div>
+                         <p className={`text-4xl font-bold mt-1 ${selectedDayBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {/* Mostra o saldo do dia selecionado */}
+                            {formatDuration(selectedDayBalanceMs)}
                          </p>
-                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">Jornada Padrão: 8h/dia</p>
+                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">
+                            Total Trabalhado no Dia: {formatDuration(selectedDayData.totalMs)}
+                         </p>
+                         <hr className="my-3 border-slate-200 dark:border-gray-700"/>
+                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Saldo Total Acumulado:</p>
+                         <p className={`text-lg font-bold ${totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatDuration(totalBalanceMs)}
+                         </p>
                     </div>
                 </div>
 
+                {/* --- NOVA SEÇÃO: REGISTROS DO DIA --- */}
+                <section className="mb-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                   <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center">
+                       <Calendar className="w-5 h-5 mr-2 text-blue-500" />
+                       Registros de {new Date(viewDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
+                   </h2>
+                   <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead>
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Hora</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                {selectedDayData.points.length > 0 ? (
+                                    selectedDayData.points.map(ponto => (
+                                        <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-3">
+                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[ponto.tipo]}`}>
+                                                    {ponto.tipo}
+                                                </span>
+                                            </td>
+                                            <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-200">
+                                                {formatTime(ponto.timestamp)}
+                                            </td>
+                                        </tr>
+                                    ))
+                                ) : (
+                                    <tr>
+                                        <td colSpan="2" className="py-8 text-center text-slate-500 dark:text-slate-400">
+                                            Nenhum registro encontrado para este dia.
+                                        </td>
+                                    </tr>
+                                )}
+                            </tbody>
+                        </table>
+                   </div>
+                </section>
+
+                {/* Seção Minhas Solicitações (movida para baixo) */}
                 <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                    <div className="flex justify-between items-center mb-4">
                        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">Minhas Solicitações</h2>
@@ -856,6 +960,7 @@ const ServidorDashboard = () => {
     );
 };
 
+// --- GestorDashboard (Sem alterações desta vez) ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -867,15 +972,13 @@ const GestorDashboard = () => {
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
     
-    // --- NOVOS STATES PARA OS FILTROS ---
-    const [selectedUnidadeId, setSelectedUnidadeId] = useState('all'); // 'all', 'null', ou um ID de unidade
+    const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
-    const [selectedDate, setSelectedDate] = useState(getTodayISOString()); // <-- STATE DE DATA
+    const [selectedDate, setSelectedDate] = useState(getTodayISOString());
 
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
 
-    // Busca SOLICITAÇÕES (sempre busca todas)
     useEffect(() => {
         if (!isFirebaseInitialized) return;
         
@@ -890,15 +993,14 @@ const GestorDashboard = () => {
         return () => unsubscribe();
     }, [db, solicitacoesCollectionPath]);
 
-    // Busca TODOS OS SERVIDORES (apenas uma vez)
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setLoadingRegistros(false); // Para o loading se o Firebase não estiver pronto
+            setLoadingRegistros(false);
             return;
         }
         
         const fetchServidores = async () => {
-            setLoadingRegistros(true); // Começa o loading aqui
+            setLoadingRegistros(true);
             try {
                 const qServidores = query(collection(db, usersCollectionPath), where('role', '==', 'servidor'));
                 const servidoresSnapshot = await getDocs(qServidores);
@@ -907,41 +1009,36 @@ const GestorDashboard = () => {
             } catch (error) {
                  console.error("Erro ao buscar servidores:", error);
                  setGlobalMessage({ type: 'error', title: 'Erro de Leitura', message: `Não foi possível carregar os servidores: ${error.message}`});
-                 setLoadingRegistros(false); // Para o loading se der erro
+                 setLoadingRegistros(false);
             }
-            // Não para o loading aqui; o próximo useEffect vai parar
         };
 
         fetchServidores();
     }, [db, usersCollectionPath, setGlobalMessage]);
 
-    // Busca REGISTROS DE PONTO (Executa quando a DATA ou a LISTA DE SERVIDORES muda)
     useEffect(() => {
-        // Não executa se a lista de servidores ainda não foi carregada
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
-            setLoadingRegistros(false); // Garante que o loading pare se não houver servidores
+            setLoadingRegistros(false);
             return;
         }
 
         const fetchPontosPorData = async () => {
             setLoadingRegistros(true);
             try {
-                // Calcular início e fim do dia para a query
                 const date = new Date(selectedDate);
-                date.setMinutes(date.getMinutes() + date.getTimezoneOffset()); // Ajusta para meia-noite UTC
+                date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
                 const startOfDay = date;
-                const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1); // Fim do dia
+                const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
 
                 const pontosMap = {};
                 for (const servidor of servidoresDaUnidade) {
                     const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
                     
-                    // Nova query com filtro de data
                     const qPontos = query(
                         collection(db, pointCollectionPath), 
                         where('timestamp', '>=', startOfDay),
                         where('timestamp', '<=', endOfDay),
-                        orderBy('timestamp', 'desc') // Ordenar por data
+                        orderBy('timestamp', 'desc')
                     );
                     
                     const pontosSnapshot = await getDocs(qPontos);
@@ -957,12 +1054,12 @@ const GestorDashboard = () => {
                     message: `Não foi possível buscar os registros. Pode ser necessário criar um índice no Firestore. Verifique o console (F12) para um link de criação de índice.` 
                 });
             } finally {
-                setLoadingRegistros(false); // Para o loading após a busca
+                setLoadingRegistros(false);
             }
         };
 
         fetchPontosPorData();
-    }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]); // Depende da data e da lista de servidores
+    }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -981,17 +1078,14 @@ const GestorDashboard = () => {
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
 
-    // Lógica de filtragem (agora depende do selectedDate)
     const filteredServidores = useMemo(() => {
         return servidoresDaUnidade
             .filter(servidor => {
-                // Filtro de Unidade
                 if (selectedUnidadeId === 'all') return true; 
                 if (selectedUnidadeId === 'null') return !servidor.unidadeId; 
                 return servidor.unidadeId === selectedUnidadeId; 
             })
             .filter(servidor => {
-                // Filtro de Busca
                 if (searchTerm.trim() === '') return true; 
                 const nome = servidor.nome?.toLowerCase() || '';
                 const matricula = servidor.matricula || '';
@@ -1000,13 +1094,12 @@ const GestorDashboard = () => {
             });
     }, [servidoresDaUnidade, selectedUnidadeId, searchTerm]);
 
-    // Função de Gerar PDF (agora usa os dados filtrados por data)
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
         
         if (filteredServidores.length === 0) {
-            setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
-            return;
+             setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
+             return;
         }
         
         const doc = new jsPDF();
@@ -1022,14 +1115,12 @@ const GestorDashboard = () => {
 
         doc.text(titulo, 14, 16);
         doc.setFontSize(12);
-        // Adiciona a data selecionada ao PDF
         doc.text(`Data: ${new Date(selectedDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`, 14, 22);
         doc.setFontSize(10);
         doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 28);
 
         const corpoTabela = [];
 
-        // Usa os servidores já filtrados
         for (const servidor of filteredServidores) {
             const unidadeServidor = unidades[servidor.unidadeId]?.name || 'Sem Unidade';
 
@@ -1037,12 +1128,10 @@ const GestorDashboard = () => {
                 { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula}) - Unidade: ${unidadeServidor}`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
             ]);
 
-            // Usa os pontos já carregados no state 'pontosDosServidores'
             const pontos = pontosDosServidores[servidor.id];
             if (!pontos || pontos.length === 0) {
                 corpoTabela.push([{ content: 'Nenhum registro encontrado para esta data.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
             } else {
-                // Inverte para ordem cronológica (ASC) no PDF
                 [...pontos].reverse().forEach(ponto => {
                     corpoTabela.push([
                         formatDateOnly(ponto.timestamp),
@@ -1054,7 +1143,7 @@ const GestorDashboard = () => {
         }
 
         doc.autoTable({
-            startY: 35, // Desce o início da tabela
+            startY: 35,
             head: [['Data', 'Tipo', 'Hora']],
             body: corpoTabela,
             theme: 'striped',
@@ -1169,7 +1258,6 @@ const GestorDashboard = () => {
                         Registros de Ponto
                     </h2>
 
-                    {/* --- FILTROS ATUALIZADOS COM DATA --- */}
                     <div className="flex flex-col sm:flex-row gap-4 mb-6">
                         <div className="flex-1">
                             <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
@@ -1200,7 +1288,6 @@ const GestorDashboard = () => {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                             </div>
                         </div>
-                        {/* --- NOVO FILTRO DE DATA --- */}
                         <div className="flex-1 sm:flex-none">
                             <label htmlFor="dateFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data</label>
                             <input
@@ -1239,7 +1326,6 @@ const GestorDashboard = () => {
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                                                     {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
-                                                        // Inverte a ordem para mostrar do mais cedo para o mais tarde (ASC)
                                                         [...pontosDosServidores[servidor.id]].reverse().map(ponto => (
                                                             <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                                                 <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
