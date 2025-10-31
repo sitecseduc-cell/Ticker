@@ -11,7 +11,7 @@ import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell // <-- Ícone do sino adicionado
+    Calendar, Bell, Eye, BellRing // <-- Ícones adicionados
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -113,7 +113,8 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [unidades, setUnidades] = useState({});
-    const [globalMessages, setGlobalMessages] = useState([]); // <-- NOVO STATE
+    const [globalMessages, setGlobalMessages] = useState([]);
+    const [allUsers, setAllUsers] = useState([]); // <-- NOVO: Armazena todos os usuários
 
     // Carregar unidades
     useEffect(() => {
@@ -133,7 +134,7 @@ const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, []);
 
-    // --- NOVO useEffect: Carregar mensagens globais ---
+    // Carregar mensagens globais
     useEffect(() => {
         if (!isFirebaseInitialized) return;
 
@@ -163,7 +164,18 @@ const AuthProvider = ({ children }) => {
                 const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION, firebaseUser.uid);
                 const userSnap = await getDoc(userDocRef);
                 if (userSnap.exists()) {
-                    setUser({ uid: firebaseUser.uid, ...userSnap.data() });
+                    const userData = { uid: firebaseUser.uid, ...userSnap.data() };
+                    setUser(userData);
+
+                    // --- NOVO: Se for Gestor ou RH, busca todos os usuários ---
+                    if (userData.role === 'gestor' || userData.role === 'rh') {
+                        const usersRef = collection(db, `artifacts/${appId}/public/data/${USER_COLLECTION}`);
+                        const qUsers = query(usersRef);
+                        const usersSnapshot = await getDocs(qUsers);
+                        setAllUsers(usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
+                    }
+                    // --- FIM NOVO ---
+                    
                 } else {
                     console.error("Usuário autenticado não encontrado no Firestore. Fazendo logout.");
                     await signOut(auth);
@@ -246,14 +258,14 @@ const AuthProvider = ({ children }) => {
         setUser(null);
     }, []);
 
-    // --- ATUALIZAÇÃO: Adiciona globalMessages ao contexto ---
     const value = useMemo(() => ({
         user,
         role: user?.role || null,
         userId: user?.uid || null,
         isLoading,
         unidades,
-        globalMessages, // <-- ADICIONADO
+        globalMessages,
+        allUsers, // <-- ADICIONADO
         handleLogin,
         handleLogout,
         handleSignUp,
@@ -261,7 +273,7 @@ const AuthProvider = ({ children }) => {
         db,
         auth,
         storage 
-    }), [user, isLoading, unidades, globalMessages, handleLogin, handleLogout, handleSignUp, handleForgotPassword]); // <-- globalMessages adicionado à dependência
+    }), [user, isLoading, unidades, globalMessages, allUsers, handleLogin, handleLogout, handleSignUp, handleForgotPassword]); // <-- Dependências atualizadas
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -407,21 +419,29 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     );
 };
 
-// --- NOVO COMPONENTE ---
-// Modal para exibir a *nova* mensagem global
-const NewMessageModal = ({ isOpen, onClose, message }) => {
+// --- *** ATUALIZADO *** Modal de Nova Mensagem ---
+const NewMessageModal = ({ isOpen, onClose, message, onAcknowledge }) => {
+    const [loading, setLoading] = useState(false);
+
     if (!isOpen || !message) return null;
+
+    const handleAcknowledge = async () => {
+        setLoading(true);
+        await onAcknowledge(message.id);
+        setLoading(false);
+        onClose();
+    };
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
                 <div className="flex items-center justify-between mb-4">
                     <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                        <Bell className="w-5 h-5 mr-2 text-blue-500" /> Nova Mensagem Global
+                        <BellRing className="w-5 h-5 mr-2 text-blue-500" /> Nova Mensagem Global
                     </h3>
                     <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
                 </div>
-                <div className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg">
+                <div className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg max-h-[50vh] overflow-y-auto">
                     <p className="text-sm text-slate-500 dark:text-slate-400">
                         Enviada por: <span className="font-medium">{message.senderName} ({message.senderRole})</span>
                     </p>
@@ -430,16 +450,22 @@ const NewMessageModal = ({ isOpen, onClose, message }) => {
                     </p>
                     <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{message.text}</p>
                 </div>
-                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Entendido</button>
+                <button 
+                    onClick={handleAcknowledge} 
+                    disabled={loading}
+                    className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center disabled:bg-blue-400"
+                >
+                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Marcar como Ciente"}
+                </button>
             </div>
         </div>
     );
 };
 
-// --- NOVO COMPONENTE ---
-// Modal para exibir *todas* as mensagens globais
-const GlobalMessagesViewerModal = ({ isOpen, onClose, messages }) => {
+// --- *** ATUALIZADO *** Modal de Histórico de Mensagens ---
+const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, allUsers, role, onDelete, onViewReads }) => {
     if (!isOpen) return null;
+    const canManage = role === 'rh' || role === 'gestor';
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
@@ -452,17 +478,40 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages }) => {
                     {messages.length === 0 ? (
                         <p className="text-slate-500 dark:text-slate-400 text-center py-8">Nenhuma mensagem global encontrada.</p>
                     ) : (
-                        messages.map(msg => (
-                            <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
-                                </p>
-                                <p className="text-sm text-slate-500 dark:text-slate-400">
-                                    Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
-                                </p>
-                                <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
-                            </div>
-                        ))
+                        messages.map(msg => {
+                            const readCount = msg.readBy ? Object.keys(msg.readBy).length : 0;
+                            return (
+                                <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
+                                    </p>
+                                    <p className="text-sm text-slate-500 dark:text-slate-400">
+                                        Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
+                                    </p>
+                                    <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
+                                    
+                                    {/* --- NOVO: Ações do Admin/Gestor --- */}
+                                    {canManage && (
+                                        <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
+                                            <button 
+                                                onClick={() => onViewReads(msg)}
+                                                className="flex items-center text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                                            >
+                                                <Eye className="w-4 h-4 mr-1" />
+                                                Visualizado por {readCount}
+                                            </button>
+                                            <button 
+                                                onClick={() => onDelete(msg.id)}
+                                                className="flex items-center text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-1" />
+                                                Excluir
+                                            </button>
+                                        </div>
+                                    )}
+                                </div>
+                            )
+                        })
                     )}
                 </div>
                 <div className="p-4 border-t dark:border-gray-800">
@@ -473,6 +522,50 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages }) => {
     );
 };
 
+// --- NOVO COMPONENTE ---
+// Modal para exibir *quem* leu a mensagem
+const MessageReadStatusModal = ({ isOpen, onClose, message, allUsers }) => {
+    if (!isOpen || !message) return null;
+
+    const readers = useMemo(() => {
+        if (!message.readBy) return [];
+        return Object.values(message.readBy).sort((a,b) => a.nome.localeCompare(b.nome));
+    }, [message]);
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 h-[70vh] flex flex-col">
+                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Status de Leitura</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
+                </div>
+                <div className="p-4 bg-slate-100 dark:bg-gray-800 border-b dark:border-gray-700">
+                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">Mensagem: "{message.text}"</p>
+                </div>
+                <div className="p-6 space-y-4 overflow-y-auto flex-1">
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100">{readers.length} Servidores leram esta mensagem:</h4>
+                    {readers.length === 0 ? (
+                        <p className="text-slate-500 dark:text-slate-400 text-center py-8">Ninguém leu esta mensagem ainda.</p>
+                    ) : (
+                        <ul className="divide-y dark:divide-gray-700">
+                            {readers.map(reader => (
+                                <li key={reader.matricula} className="py-2">
+                                    <p className="font-medium text-slate-700 dark:text-slate-200">{reader.nome} ({reader.matricula})</p>
+                                    <p className="text-xs text-slate-500 dark:text-slate-400">
+                                        Lido em: {formatDateOnly(reader.readAt)} às {formatTime(reader.readAt)}
+                                    </p>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+                <div className="p-4 border-t dark:border-gray-800">
+                    <button onClick={onClose} className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
@@ -781,7 +874,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 
 // --- *** ATUALIZADO *** ServidorDashboard ---
 const ServidorDashboard = () => {
-    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext(); // <-- globalMessages
+    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
@@ -791,11 +884,9 @@ const ServidorDashboard = () => {
 
     const [viewDate, setViewDate] = useState(getTodayISOString());
     
-    // --- NOVOS STATES (Notificações) ---
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
-    const lastReadTimestamp = localStorage.getItem('lastReadTimestamp') || 0;
-    // --- FIM NOVOS STATES ---
+    const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${userId}`) || 0; // Chave por usuário
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -820,7 +911,7 @@ const ServidorDashboard = () => {
         return () => { unsubPoints(); unsubSolicitations(); };
     }, [db, userId, pointCollectionPath, solicitacoesCollectionPath]);
 
-    // --- NOVO useEffect (Calcula msgs não lidas) ---
+    // Calcula msgs não lidas
     useEffect(() => {
         if (globalMessages.length > 0) {
             const newUnreadCount = globalMessages.filter(
@@ -829,7 +920,6 @@ const ServidorDashboard = () => {
             setUnreadCount(newUnreadCount);
         }
     }, [globalMessages, lastReadTimestamp]);
-    // --- FIM NOVO useEffect ---
 
     const dailySummary = useMemo(() => {
         const summary = {};
@@ -918,16 +1008,14 @@ const ServidorDashboard = () => {
         }
     }, [userId, db, pointCollectionPath, user?.unidadeId, nextPointType, setGlobalMessage]);
 
-    // --- NOVA FUNÇÃO ---
     // Abre o modal de lista e marca as mensagens como lidas
     const openNotificationList = () => {
         setIsNotificationListOpen(true);
         if (globalMessages.length > 0) {
-            localStorage.setItem('lastReadTimestamp', globalMessages[0].createdAt.toDate().getTime().toString());
+            localStorage.setItem(`lastReadTimestamp_${userId}`, globalMessages[0].createdAt.toDate().getTime().toString());
         }
         setUnreadCount(0);
     };
-    // --- FIM DA NOVA FUNÇÃO ---
 
     const buttonMap = {
         entrada: { label: 'Registrar Entrada', icon: LogIn, color: 'bg-emerald-600 hover:bg-emerald-700' },
@@ -957,7 +1045,6 @@ const ServidorDashboard = () => {
                             Matrícula: {user.matricula} | Unidade: {unidadeNome}
                         </p>
                     </div>
-                    {/* --- ATUALIZAÇÃO: Adiciona o ícone de sino --- */}
                     <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
                         
@@ -1097,11 +1184,11 @@ const ServidorDashboard = () => {
                 </section>
 
                  <SolicitationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
-                 {/* --- NOVO: Renderiza o modal de lista de notificações --- */}
                  <GlobalMessagesViewerModal 
                     isOpen={isNotificationListOpen} 
                     onClose={() => setIsNotificationListOpen(false)} 
-                    messages={globalMessages} 
+                    messages={globalMessages}
+                    role="servidor" // <-- Função limitada (apenas visualização)
                  />
             </div>
         </div>
@@ -1110,7 +1197,7 @@ const ServidorDashboard = () => {
 
 // --- *** ATUALIZADO *** GestorDashboard ---
 const GestorDashboard = () => {
-    const { user, db, handleLogout, unidades, globalMessages } = useAuthContext(); // <-- globalMessages
+    const { user, db, handleLogout, unidades, globalMessages, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
@@ -1123,12 +1210,15 @@ const GestorDashboard = () => {
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDate, setSelectedDate] = useState(getTodayISOString());
+    const [activeTab, setActiveTab] = useState('solicitacoes'); // <-- NOVO STATE de TABS
 
-    // --- NOVOS STATES (Notificações) ---
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
-    const lastReadTimestamp = localStorage.getItem('lastReadTimestamp') || 0;
-    // --- FIM NOVOS STATES ---
+    const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
+    
+    // --- NOVO: State para o modal de leituras ---
+    const [viewingMessageReads, setViewingMessageReads] = useState(null);
+
 
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -1147,7 +1237,6 @@ const GestorDashboard = () => {
         return () => unsubscribe();
     }, [db, solicitacoesCollectionPath]);
 
-    // --- NOVO useEffect (Calcula msgs não lidas) ---
     useEffect(() => {
         if (globalMessages.length > 0) {
             const newUnreadCount = globalMessages.filter(
@@ -1156,7 +1245,6 @@ const GestorDashboard = () => {
             setUnreadCount(newUnreadCount);
         }
     }, [globalMessages, lastReadTimestamp]);
-    // --- FIM NOVO useEffect ---
 
     useEffect(() => {
         if (!isFirebaseInitialized) {
@@ -1164,22 +1252,10 @@ const GestorDashboard = () => {
             return;
         }
         
-        const fetchServidores = async () => {
-            setLoadingRegistros(true);
-            try {
-                const qServidores = query(collection(db, usersCollectionPath), where('role', '==', 'servidor'));
-                const servidoresSnapshot = await getDocs(qServidores);
-                const servidores = servidoresSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-                setServidoresDaUnidade(servidores);
-            } catch (error) {
-                 console.error("Erro ao buscar servidores:", error);
-                 setGlobalMessage({ type: 'error', title: 'Erro de Leitura', message: `Não foi possível carregar os servidores: ${error.message}`});
-                 setLoadingRegistros(false);
-            }
-        };
+        // A lista de `allUsers` agora vem do context, então podemos usar `setServidoresDaUnidade`
+        setServidoresDaUnidade(allUsers.filter(u => u.role === 'servidor'));
 
-        fetchServidores();
-    }, [db, usersCollectionPath, setGlobalMessage]);
+    }, [allUsers]); // <-- Depende de allUsers do contexto
 
     useEffect(() => {
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
@@ -1327,16 +1403,27 @@ const GestorDashboard = () => {
          }
     };
     
-    // --- NOVA FUNÇÃO ---
     // Abre o modal de lista e marca as mensagens como lidas
     const openNotificationList = () => {
         setIsNotificationListOpen(true);
         if (globalMessages.length > 0) {
-            localStorage.setItem('lastReadTimestamp', globalMessages[0].createdAt.toDate().getTime().toString());
+            localStorage.setItem(`lastReadTimestamp_${user.uid}`, globalMessages[0].createdAt.toDate().getTime().toString());
         }
         setUnreadCount(0);
     };
-    // --- FIM DA NOVA FUNÇÃO ---
+    
+    // --- NOVO: Handle para deletar mensagem ---
+    const handleDeleteMessage = async (messageId) => {
+        if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
+        
+        try {
+            const msgRef = doc(db, `artifacts/${appId}/public/data/global_messages`, messageId);
+            await deleteDoc(msgRef);
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Mensagem global excluída.' });
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível excluir a mensagem: ${error.message}` });
+        }
+    };
 
     return (
         <div className="p-4 md:p-8">
@@ -1350,7 +1437,6 @@ const GestorDashboard = () => {
                             Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
                         </p>
                     </div>
-                     {/* --- ATUALIZAÇÃO: Adiciona o ícone de sino --- */}
                      <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
 
@@ -1373,184 +1459,213 @@ const GestorDashboard = () => {
                     </div>
                 </header>
 
-                <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                            <Mail className="w-5 h-5 mr-2 text-amber-500" />
-                            Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
-                        </h2>
-                        <button
-                            onClick={handleGerarRelatorio} 
-                            className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition w-full sm:w-auto"
-                        >
-                            <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de Pontos
-                        </button>
-                    </div>
+                {/* --- NOVO: Abas de Navegação --- */}
+                <div className="border-b mb-6 dark:border-gray-800">
+                    <nav className="flex space-x-2">
+                         <button onClick={() => setActiveTab('solicitacoes')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'solicitacoes' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Mail className="w-4 h-4 mr-2" /> Solicitações</button>
+                         <button onClick={() => setActiveTab('registros')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'registros' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Clock className="w-4 h-4 mr-2" /> Registros de Ponto</button>
+                         <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><MessageSquare className="w-4 h-4 mr-2" /> Mensagem Global</button>
+                    </nav>
+                </div>
+                {/* --- FIM DAS NOVAS ABAS --- */}
 
-                    <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                            <thead className="border-b border-slate-200 dark:border-gray-800">
-                                <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unidade</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                {solicitacoes
-                                  .filter(sol => filteredServidores.some(s => s.id === sol.requesterId))
-                                  .map(sol => (
-                                    <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                        <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
-                                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
-                                        <td className="px-4 py-4">
-                                            <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
-                                            <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
-                                        </td>
-                                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
-                                             <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
-                                            {sol.anexoUrl &&
-                                                <button onClick={() => setViewingFile({ 
-                                                            url: sol.anexoUrl, 
-                                                            name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl)
-                                                        })} 
-                                                        className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
-                                                    <File className="w-3 h-3 mr-1" /> Ver Anexo
-                                                </button>
-                                            }
-                                        </td>
-                                        <td className="px-4 py-4">
-                                            {sol.status === 'pendente' ? (
-                                                <div className="flex items-center space-x-2">
-                                                    <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
-                                                        {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
-                                                    </button>
-                                                    <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
-                                                        {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
-                                                    </button>
-                                                </div>
-                                            ) : (
-                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
-                                            )}
-                                        </td>
-                                    </tr>
-                                ))}
-                                {solicitacoes.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </section>
-                
-                <section className="mt-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                    <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
-                        <Clock className="w-5 h-5 mr-2 text-blue-500" />
-                        Registros de Ponto
-                    </h2>
-
-                    <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                        <div className="flex-1">
-                            <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
-                            <select
-                                id="unitFilter"
-                                value={selectedUnidadeId}
-                                onChange={(e) => setSelectedUnidadeId(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="all">Todas as Unidades</option>
-                                <option value="null">Sem Unidade</option>
-                                {Object.entries(unidades).map(([id, unit]) => (
-                                    <option key={id} value={id}>{unit.name}</option>
-                                ))}
-                            </select>
+                {/* --- ABA DE SOLICITAÇÕES --- */}
+                {activeTab === 'solicitacoes' && (
+                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
+                                <Mail className="w-5 h-5 mr-2 text-amber-500" />
+                                Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
+                            </h2>
                         </div>
-                        <div className="flex-1">
-                            <label htmlFor="searchFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Buscar Servidor</label>
-                            <div className="relative">
+                        <div className="overflow-x-auto">
+                            <table className="min-w-full">
+                                <thead className="border-b border-slate-200 dark:border-gray-800">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unidade</th>
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
+                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                    {solicitacoes.map(sol => (
+                                        <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                            <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
+                                            <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
+                                            <td className="px-4 py-4">
+                                                <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
+                                                <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
+                                            </td>
+                                            <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
+                                                <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
+                                                {sol.anexoUrl &&
+                                                    <button onClick={() => setViewingFile({ 
+                                                                url: sol.anexoUrl, 
+                                                                name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl)
+                                                            })} 
+                                                            className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
+                                                        <File className="w-3 h-3 mr-1" /> Ver Anexo
+                                                    </button>
+                                                }
+                                            </td>
+                                            <td className="px-4 py-4">
+                                                {sol.status === 'pendente' ? (
+                                                    <div className="flex items-center space-x-2">
+                                                        <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                            {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                        </button>
+                                                        <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                            {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                                )}
+                                            </td>
+                                        </tr>
+                                    ))}
+                                    {solicitacoes.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
+                                </tbody>
+                            </table>
+                        </div>
+                    </section>
+                )}
+
+                {/* --- ABA DE REGISTROS DE PONTO --- */}
+                {activeTab === 'registros' && (
+                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
+                                <Clock className="w-5 h-5 mr-2 text-blue-500" />
+                                Registros de Ponto
+                            </h2>
+                            <button
+                                onClick={handleGerarRelatorio} 
+                                className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition w-full sm:w-auto"
+                            >
+                                <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de Pontos
+                            </button>
+                        </div>
+
+                        <div className="flex flex-col sm:flex-row gap-4 mb-6">
+                            <div className="flex-1">
+                                <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
+                                <select
+                                    id="unitFilter"
+                                    value={selectedUnidadeId}
+                                    onChange={(e) => setSelectedUnidadeId(e.target.value)}
+                                    className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                >
+                                    <option value="all">Todas as Unidades</option>
+                                    <option value="null">Sem Unidade</option>
+                                    {Object.entries(unidades).map(([id, unit]) => (
+                                        <option key={id} value={id}>{unit.name}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            <div className="flex-1">
+                                <label htmlFor="searchFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Buscar Servidor</label>
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        id="searchFilter"
+                                        placeholder="Buscar por nome ou matrícula..."
+                                        value={searchTerm}
+                                        onChange={(e) => setSearchTerm(e.target.value)}
+                                        className="w-full p-2 border rounded-lg pl-10 bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    />
+                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                </div>
+                            </div>
+                            <div className="flex-1 sm:flex-none">
+                                <label htmlFor="dateFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data</label>
                                 <input
-                                    type="text"
-                                    id="searchFilter"
-                                    placeholder="Buscar por nome ou matrícula..."
-                                    value={searchTerm}
-                                    onChange={(e) => setSearchTerm(e.target.value)}
-                                    className="w-full p-2 border rounded-lg pl-10 bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                                    type="date"
+                                    id="dateFilter"
+                                    value={selectedDate}
+                                    onChange={(e) => setSelectedDate(e.target.value)}
+                                    className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
                                 />
-                                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                             </div>
                         </div>
-                        <div className="flex-1 sm:flex-none">
-                            <label htmlFor="dateFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data</label>
-                            <input
-                                type="date"
-                                id="dateFilter"
-                                value={selectedDate}
-                                onChange={(e) => setSelectedDate(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                            />
-                        </div>
-                    </div>
 
-                    {loadingRegistros ? (
-                        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
-                    ) : (
-                        <div className="space-y-6">
-                            {filteredServidores.length === 0 ? (
-                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">
-                                    {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado.'}
-                                </p>
-                            ) : (
-                                filteredServidores.map(servidor => (
-                                    <div key={servidor.id}>
-                                        <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
-                                            Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
-                                        </p>
-                                        <div className="overflow-x-auto border rounded-lg dark:border-gray-800">
-                                            <table className="min-w-full">
-                                                <thead className="bg-slate-50 dark:bg-gray-800/50">
-                                                    <tr>
-                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
-                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                                    {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
-                                                        [...pontosDosServidores[servidor.id]].reverse().map(ponto => (
-                                                            <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                                                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
-                                                                <td className="px-4 py-3 text-sm">
-                                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[ponto.tipo] || 'bg-gray-200 text-gray-800'}`}>
-                                                                        {ponto.tipo}
-                                                                    </span>
-                                                                </td>
-                                                                <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
-                                                            </tr>
-                                                        ))
-                                                    ) : (
+                        {loadingRegistros ? (
+                            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
+                        ) : (
+                            <div className="space-y-6">
+                                {filteredServidores.length === 0 ? (
+                                    <p className="text-slate-500 dark:text-slate-400 text-center py-4">
+                                        {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado.'}
+                                    </p>
+                                ) : (
+                                    filteredServidores.map(servidor => (
+                                        <div key={servidor.id}>
+                                            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
+                                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
+                                                Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
+                                            </p>
+                                            <div className="overflow-x-auto border rounded-lg dark:border-gray-800">
+                                                <table className="min-w-full">
+                                                    <thead className="bg-slate-50 dark:bg-gray-800/50">
                                                         <tr>
-                                                            <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                                                                Nenhum registro de ponto para esta data.
-                                                            </td>
+                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
                                                         </tr>
-                                                    )}
-                                                </tbody>
-                                            </table>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                                        {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
+                                                            [...pontosDosServidores[servidor.id]].reverse().map(ponto => (
+                                                                <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                                                    <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
+                                                                    <td className="px-4 py-3 text-sm">
+                                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[ponto.tipo] || 'bg-gray-200 text-gray-800'}`}>
+                                                                            {ponto.tipo}
+                                                                        </span>
+                                                                    </td>
+                                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
+                                                                </tr>
+                                                            ))
+                                                        ) : (
+                                                            <tr>
+                                                                <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                                                    Nenhum registro de ponto para esta data.
+                                                                </td>
+                                                            </tr>
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
                                         </div>
-                                    </div>
-                                ))
-                            )}
-                        </div>
-                    )}
-                </section>
+                                    ))
+                                )}
+                            </div>
+                        )}
+                    </section>
+                )}
+                
+                {/* --- ABA DE MENSAGEM GLOBAL --- */}
+                {activeTab === 'messages' && (
+                    <GlobalMessagesManager role="gestor" />
+                )}
 
                 <FileViewerModal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} fileUrl={viewingFile?.url} fileName={viewingFile?.name} />
-                {/* --- NOVO: Renderiza o modal de lista de notificações --- */}
                 <GlobalMessagesViewerModal 
                     isOpen={isNotificationListOpen} 
                     onClose={() => setIsNotificationListOpen(false)} 
-                    messages={globalMessages} 
+                    messages={globalMessages}
+                    role="gestor" // <-- Papel 'gestor'
+                    allUsers={allUsers}
+                    onDelete={handleDeleteMessage}
+                    onViewReads={setViewingMessageReads}
+                />
+                {/* --- NOVO: Modal de Status de Leitura --- */}
+                <MessageReadStatusModal
+                    isOpen={!!viewingMessageReads}
+                    onClose={() => setViewingMessageReads(null)}
+                    message={viewingMessageReads}
                 />
             </div>
         </div>
@@ -1558,10 +1673,9 @@ const GestorDashboard = () => {
 };
 
 const UserManagement = () => {
-    const { db, unidades } = useAuthContext();
+    const { db, unidades, allUsers } = useAuthContext(); // <-- allUsers do contexto
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const [users, setUsers] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [loading, setLoading] = useState(true); // Começa como true
     const [searchTerm, setSearchTerm] = useState('');
     const [editingUser, setEditingUser] = useState(null);
     const [userToDelete, setUserToDelete] = useState(null);
@@ -1569,23 +1683,17 @@ const UserManagement = () => {
 
     const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
+    // --- ATUALIZADO: Não busca mais usuários, apenas usa o do contexto ---
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setUsers([
+            setAllUsers([ // Define 'allUsers' se não inicializado (para demo)
                 {id: 'demo1', nome: 'Admin Demo', matricula: '001', role: 'rh', unidadeId: 'unidade-adm-01'},
                 {id: 'demo2', nome: 'Gestor Demo', matricula: '002', role: 'gestor', unidadeId: 'unidade-esc-01'},
                 {id: 'demo3', nome: 'Servidor Demo', matricula: '003', role: 'servidor', unidadeId: 'unidade-esc-01'},
             ]);
-            setLoading(false);
-            return;
-        };
-        const q = query(collection(db, usersCollectionPath));
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-            setLoading(false);
-        }, () => setLoading(false));
-        return () => unsubscribe();
-    }, [db, usersCollectionPath]);
+        }
+        setLoading(false); // Para de carregar
+    }, [allUsers]); // Reage à mudança em allUsers
 
     const handleUpdateUser = async (e) => {
         e.preventDefault();
@@ -1627,7 +1735,7 @@ const UserManagement = () => {
         setEditingUser({ ...editingUser, [e.target.name]: e.target.value });
     };
 
-    const filteredUsers = users.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const filteredUsers = allUsers.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
     const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
@@ -1839,11 +1947,13 @@ const UnitManagement = () => {
     );
 };
 
-const MessageBoxForAllUsers = () => {
-    const { user: currentUser, db } = useAuthContext();
+// --- *** ATUALIZADO *** Componente de Gerenciamento de Mensagens ---
+const GlobalMessagesManager = ({ role }) => {
+    const { user: currentUser, db, globalMessages, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
+    const [viewingMessageReads, setViewingMessageReads] = useState(null);
     const messagesCollectionPath = `artifacts/${appId}/public/data/global_messages`;
 
     const handleSendMessage = async (e) => {
@@ -1855,7 +1965,8 @@ const MessageBoxForAllUsers = () => {
                 text: message,
                 senderName: currentUser.nome,
                 senderRole: currentUser.role,
-                createdAt: new Date(), // <-- Alterado para new Date()
+                createdAt: new Date(),
+                readBy: {}, // <-- NOVO: Inicia campo de leituras
             });
             setGlobalMessage({ type: 'success', title: 'Mensagem Enviada', message: 'Sua mensagem foi enviada para todos os usuários.' });
             setMessage('');
@@ -1866,17 +1977,78 @@ const MessageBoxForAllUsers = () => {
         }
     };
 
+    const handleDeleteMessage = async (messageId) => {
+        if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
+        
+        try {
+            const msgRef = doc(db, messagesCollectionPath, messageId);
+            await deleteDoc(msgRef);
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Mensagem global excluída.' });
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível excluir a mensagem: ${error.message}` });
+        }
+    };
+
     return (
-        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-            <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
-            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
-            <form onSubmit={handleSendMessage} className="space-y-3">
-                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
-                <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
-                     {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
-                     {loading ? 'Enviando...' : 'Enviar Mensagem'}
-                </button>
-            </form>
+        <div className="space-y-6">
+            <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
+                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
+                <form onSubmit={handleSendMessage} className="space-y-3">
+                    <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
+                    <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
+                        {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
+                        {loading ? 'Enviando...' : 'Enviar Mensagem'}
+                    </button>
+                </form>
+            </div>
+
+            <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                 <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100">Histórico de Mensagens</h3>
+                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
+                    {globalMessages.length === 0 ? (
+                            <p className="text-slate-500 dark:text-slate-400 text-center py-8">Nenhuma mensagem global encontrada.</p>
+                        ) : (
+                            globalMessages.map(msg => {
+                                const readCount = msg.readBy ? Object.keys(msg.readBy).length : 0;
+                                return (
+                                    <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                                            Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
+                                        </p>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400">
+                                            Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
+                                        </p>
+                                        <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
+                                        
+                                        <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
+                                            <button 
+                                                onClick={() => setViewingMessageReads(msg)}
+                                                className="flex items-center text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
+                                            >
+                                                <Eye className="w-4 h-4 mr-1" />
+                                                Visualizado por {readCount}
+                                            </button>
+                                            <button 
+                                                onClick={() => handleDeleteMessage(msg.id)}
+                                                className="flex items-center text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
+                                            >
+                                                <Trash2 className="w-4 h-4 mr-1" />
+                                                Excluir
+                                            </button>
+                                        </div>
+                                    </div>
+                                )
+                            })
+                        )}
+                 </div>
+            </div>
+
+            <MessageReadStatusModal
+                isOpen={!!viewingMessageReads}
+                onClose={() => setViewingMessageReads(null)}
+                message={viewingMessageReads}
+            />
         </div>
     );
 };
@@ -1910,7 +2082,7 @@ const RHAdminDashboard = () => {
 
                 {activeTab === 'users' && <UserManagement />}
                 {activeTab === 'units' && <UnitManagement />}
-                {activeTab === 'messages' && <MessageBoxForAllUsers />}
+                {activeTab === 'messages' && <GlobalMessagesManager role="rh" />}
             </div>
         </div>
     );
@@ -1928,21 +2100,18 @@ const Footer = () => {
 
 // --- *** ATUALIZADO *** AppContent ---
 const AppContent = () => {
-    const { user, role, isLoading, globalMessages } = useAuthContext();
+    const { user, role, isLoading, globalMessages, db } = useAuthContext();
     const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
     
-    // --- NOVOS STATES (Notificação Pop-up) ---
     const [newestMessage, setNewestMessage] = useState(null);
     const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
-    // --- FIM NOVOS STATES ---
 
-    // --- NOVO useEffect (Verifica novas mensagens ao logar) ---
     useEffect(() => {
         if (!user || globalMessages.length === 0) {
-            return; // Só executa se o usuário estiver logado e houver mensagens
+            return;
         }
 
-        const lastReadTimestamp = localStorage.getItem('lastReadTimestamp') || 0;
+        const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
         const newestMsg = globalMessages[0];
         
         if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
@@ -1950,18 +2119,34 @@ const AppContent = () => {
             setIsNewMessageModalOpen(true);
         }
         
-    }, [globalMessages, user]); // Depende das mensagens e do usuário
+    }, [globalMessages, user]);
     
-    // --- NOVA FUNÇÃO ---
-    const handleCloseNewMessageModal = () => {
-        if (newestMessage) {
-            // Marca como lida
-            localStorage.setItem('lastReadTimestamp', newestMessage.createdAt.toDate().getTime().toString());
+    // --- ATUALIZADO: Agora é async e salva no Firestore ---
+    const handleAcknowledgeMessage = async (messageId) => {
+        if (!messageId || !user) return;
+
+        // Salva no localStorage (para o pop-up imediato)
+        const timestamp = newestMessage.createdAt.toDate().getTime().toString();
+        localStorage.setItem(`lastReadTimestamp_${user.uid}`, timestamp);
+
+        // Salva no Firestore (para o Admin/Gestor ver)
+        try {
+            const msgRef = doc(db, `artifacts/${appId}/public/data/global_messages`, messageId);
+            await updateDoc(msgRef, {
+                // Usamos a notação de ponto para atualizar um campo dentro de um map
+                [`readBy.${user.uid}`]: {
+                    nome: user.nome,
+                    matricula: user.matricula,
+                    readAt: new Date()
+                }
+            });
+        } catch (error) {
+            console.error("Erro ao marcar mensagem como lida:", error);
         }
+
         setIsNewMessageModalOpen(false);
         setNewestMessage(null);
     };
-    // --- FIM NOVA FUNÇÃO ---
 
     if (isLoading) {
         return <LoadingScreen />;
@@ -1992,11 +2177,11 @@ const AppContent = () => {
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
                 
-                {/* --- NOVO: Renderiza o modal de nova mensagem --- */}
                 <NewMessageModal 
                     isOpen={isNewMessageModalOpen}
-                    onClose={handleCloseNewMessageModal}
+                    onClose={() => setIsNewMessageModalOpen(false)} // Fechar sem marcar como lido (pelo 'X')
                     message={newestMessage}
+                    onAcknowledge={handleAcknowledgeMessage} // Clicar em "Entendido"
                 />
             </main>
             <Footer />
