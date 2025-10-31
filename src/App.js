@@ -11,7 +11,7 @@ import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar // <-- Adicionado Ícone de Calendário
+    Calendar
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -387,15 +387,36 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
 };
 
 
+// --- *** ATUALIZADO *** LoginScreen ---
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const [email, setEmail] = useState('');
+    
+    // --- ATUALIZAÇÃO: Carrega o email e a preferência do localStorage ---
+    const [rememberMe, setRememberMe] = useState(() => 
+        localStorage.getItem('rememberMePreference') === 'true'
+    );
+    const [email, setEmail] = useState(() => 
+        rememberMe ? localStorage.getItem('rememberedEmail') || '' : ''
+    );
+    // --- FIM DA ATUALIZAÇÃO ---
+    
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const onLogin = async (e) => {
         e.preventDefault();
+        
+        // --- ATUALIZAÇÃO: Salva ou remove o email do localStorage ---
+        if (rememberMe) {
+            localStorage.setItem('rememberedEmail', email);
+            localStorage.setItem('rememberMePreference', 'true');
+        } else {
+            localStorage.removeItem('rememberedEmail');
+            localStorage.removeItem('rememberMePreference');
+        }
+        // --- FIM DA ATUALIZAÇÃO ---
+
         setLoading(true);
         try {
             await handleLogin(email, password);
@@ -424,6 +445,25 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
             <form onSubmit={onLogin} className="space-y-4">
                  <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
+                 
+                 {/* --- ATUALIZAÇÃO: Checkbox "Lembrar-me" --- */}
+                 <div className="flex items-center space-x-2">
+                    <input
+                        type="checkbox"
+                        id="rememberMe"
+                        checked={rememberMe}
+                        onChange={(e) => setRememberMe(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"
+                    />
+                    <label 
+                        htmlFor="rememberMe" 
+                        className="text-sm text-slate-600 dark:text-slate-300"
+                    >
+                        Lembrar meu email
+                    </label>
+                 </div>
+                 {/* --- FIM DA ATUALIZAÇÃO --- */}
+
                  <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
                     {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Entrar'}
                  </button>
@@ -539,7 +579,6 @@ const formatDateOnly = (timestamp) => {
     return date.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' });
 };
 const formatDuration = (ms) => {
-    // Retorna '00:00' se ms for 0 ou NaN/undefined
     if (!ms) return '00:00'; 
     const sign = ms < 0 ? '-' : '+';
     const absMs = Math.abs(ms);
@@ -660,7 +699,6 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
-// --- *** ATUALIZADO *** ServidorDashboard ---
 const ServidorDashboard = () => {
     const { user, userId, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -670,19 +708,15 @@ const ServidorDashboard = () => {
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
 
-    // --- NOVO STATE ---
-    // Controla o dia que está sendo visualizado no banco de horas e nos registros
     const [viewDate, setViewDate] = useState(getTodayISOString());
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
-    // Este useEffect busca TODOS os pontos, o que é necessário para o cálculo do SALDO TOTAL
     useEffect(() => {
         if (!isFirebaseInitialized || !userId) return;
         
-        // Busca todos os pontos do usuário para calcular o banco total
         const qPoints = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc'));
         const unsubPoints = onSnapshot(qPoints, (snapshot) => {
             const fetchedPoints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -690,7 +724,6 @@ const ServidorDashboard = () => {
             setLastPoint(fetchedPoints[0] || null);
         });
 
-        // Busca as solicitações do usuário
         const qSolicitations = query(collection(db, solicitacoesCollectionPath), where('requesterId', '==', userId), orderBy('createdAt', 'desc'));
         const unsubSolicitations = onSnapshot(qSolicitations, (snapshot) => {
             setSolicitacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
@@ -699,7 +732,6 @@ const ServidorDashboard = () => {
         return () => { unsubPoints(); unsubSolicitations(); };
     }, [db, userId, pointCollectionPath, solicitacoesCollectionPath]);
 
-    // Calcula o resumo diário e o saldo total
     const dailySummary = useMemo(() => {
         const summary = {};
         let totalBalanceMs = 0;
@@ -711,7 +743,6 @@ const ServidorDashboard = () => {
             summary[dateKey].points.push(point);
         });
 
-        // Loop para calcular o total de cada dia e o saldo total
         Object.keys(summary).sort().forEach(dateKey => {
             const day = summary[dateKey];
             let totalWorkedMs = 0;
@@ -727,18 +758,16 @@ const ServidorDashboard = () => {
                 }
             });
 
-            // Se o dia ainda está em andamento (ex: 'entrada' sem 'saida')
             if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
                 totalWorkedMs += (new Date().getTime() - currentSegmentStart);
             }
 
             day.totalMs = totalWorkedMs;
-            // O saldo do dia só é calculado se o dia estiver finalizado (último ponto é 'saida')
             const lastPointOfDay = day.points[day.points.length - 1];
             if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
                  day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
             } else {
-                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
+                 day.balanceMs = 0;
             }
 
             totalBalanceMs += day.balanceMs;
@@ -746,13 +775,9 @@ const ServidorDashboard = () => {
         return { summary, totalBalanceMs };
     }, [points]);
 
-    // --- NOVO useMemo ---
-    // Pega os dados (pontos e saldo) APENAS para o dia selecionado no calendário
     const selectedDayData = useMemo(() => {
-        // Precisamos ajustar a data para comparar com as chaves do 'summary'
-        // O input 'viewDate' é YYYY-MM-DD. Precisamos converter para DD/MM/YYYY
         const dateObj = new Date(viewDate);
-        dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset()); // Corrige fuso
+        dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
         const dateKey = formatDateOnly(dateObj);
         
         return dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
@@ -803,10 +828,7 @@ const ServidorDashboard = () => {
     };
     const currentButton = buttonMap[nextPointType];
     
-    // --- LÓGICA ATUALIZADA ---
-    // Saldo do dia selecionado (para o card principal)
     const selectedDayBalanceMs = selectedDayData.balanceMs;
-    // Saldo total (para o texto pequeno)
     const totalBalanceMs = dailySummary.totalBalanceMs;
 
     return (
@@ -837,7 +859,6 @@ const ServidorDashboard = () => {
                     </div>
                 </header>
 
-                {/* --- GRID PRINCIPAL ATUALIZADO --- */}
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="md:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                        <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100">Registrar Ponto</h2>
@@ -853,7 +874,6 @@ const ServidorDashboard = () => {
                             </button>
                         </div>
                     </div>
-                     {/* --- CARD DE BANCO DE HORAS ATUALIZADO --- */}
                      <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                          <div className="flex justify-between items-center mb-2">
                              <label htmlFor="banco-date" className="text-sm font-medium text-slate-500 dark:text-slate-400">Banco de Horas do Dia:</label>
@@ -866,7 +886,6 @@ const ServidorDashboard = () => {
                             />
                          </div>
                          <p className={`text-4xl font-bold mt-1 ${selectedDayBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {/* Mostra o saldo do dia selecionado */}
                             {formatDuration(selectedDayBalanceMs)}
                          </p>
                          <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">
@@ -880,7 +899,6 @@ const ServidorDashboard = () => {
                     </div>
                 </div>
 
-                {/* --- NOVA SEÇÃO: REGISTROS DO DIA --- */}
                 <section className="mb-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                    <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center">
                        <Calendar className="w-5 h-5 mr-2 text-blue-500" />
@@ -920,7 +938,6 @@ const ServidorDashboard = () => {
                    </div>
                 </section>
 
-                {/* Seção Minhas Solicitações (movida para baixo) */}
                 <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                    <div className="flex justify-between items-center mb-4">
                        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">Minhas Solicitações</h2>
@@ -960,7 +977,6 @@ const ServidorDashboard = () => {
     );
 };
 
-// --- GestorDashboard (Sem alterações desta vez) ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1017,8 +1033,9 @@ const GestorDashboard = () => {
     }, [db, usersCollectionPath, setGlobalMessage]);
 
     useEffect(() => {
+        // Não busca pontos se a lista de servidores estiver vazia
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
-            setLoadingRegistros(false);
+            setLoadingRegistros(false); 
             return;
         }
 
