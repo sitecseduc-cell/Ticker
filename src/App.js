@@ -62,6 +62,13 @@ const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
 const USER_COLLECTION = 'users';
 const UNIT_COLLECTION = 'unidades';
 
+// --- Helper: Pega a data de hoje no formato YYYY-MM-DD ---
+const getTodayISOString = () => {
+    const today = new Date();
+    today.setMinutes(today.getMinutes() - today.getTimezoneOffset()); // Ajusta para o fuso horário local
+    return today.toISOString().split('T')[0];
+};
+
 // --- Contexts ---
 const ThemeContext = createContext();
 const AuthContext = createContext();
@@ -232,7 +239,7 @@ const AuthProvider = ({ children }) => {
         handleForgotPassword,
         db,
         auth,
-        storage // ADICIONADO storage AO CONTEXTO
+        storage 
     }), [user, isLoading, unidades, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
@@ -336,11 +343,9 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isLoad
     );
 };
 
-// --- *** ATUALIZADO *** FileViewerModal ---
 const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     if (!isOpen) return null;
 
-    // Verifica se o arquivo é uma imagem pela extensão
     const isImage = fileUrl && /\.(jpe?g|png|gif|webp)$/i.test(fileName || fileUrl);
 
     return (
@@ -351,7 +356,6 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
                 
                 <div className="mt-4 p-4 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 min-h-[200px] flex items-center justify-center">
                     {isImage ? (
-                        // Se for imagem, exibe
                         <img 
                             src={fileUrl} 
                             alt={`Anexo ${fileName}`} 
@@ -359,7 +363,6 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
                             onError={(e) => { e.target.onerror = null; e.target.outerHTML = '<p class="text-red-500">Erro ao carregar imagem.</p>'; }}
                         />
                     ) : (
-                        // Se não for (PDF, DOCX, etc.), mostra ícone e botão de download
                         <div className="text-center">
                             <FileText className="w-16 h-16 text-slate-400 mx-auto" />
                             <p className="font-semibold dark:text-slate-200 mt-2">Não é possível pré-visualizar este arquivo.</p>
@@ -368,7 +371,7 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
                                 href={fileUrl} 
                                 target="_blank" 
                                 rel="noopener noreferrer" 
-                                download={fileName} // Sugere o nome original para download
+                                download={fileName}
                                 className="mt-4 inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
                             >
                                 Baixar Arquivo
@@ -545,13 +548,12 @@ const formatDuration = (ms) => {
     return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
-// --- *** ATUALIZADO *** SolicitationModal ---
 const SolicitationModal = ({ isOpen, onClose }) => {
-    const { user, db, storage } = useAuthContext(); // PEGUE O storage DO CONTEXTO
+    const { user, db, storage } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [formData, setFormData] = useState({
         tipo: 'abono',
-        dataOcorrencia: new Date().toISOString().split('T')[0],
+        dataOcorrencia: getTodayISOString(), // Padrão para hoje
         justificativaTexto: '',
         anexoFile: null,
     });
@@ -575,15 +577,12 @@ const SolicitationModal = ({ isOpen, onClose }) => {
             let anexoUrl = '';
             let anexoNome = '';
             if (formData.anexoFile) {
-                // --- LÓGICA DE UPLOAD REAL ---
                 const file = formData.anexoFile;
                 anexoNome = file.name;
-                // Caminho no Storage: anexos/{UID_DO_USUARIO}/{timestamp}_{nome_do_arquivo}
                 const storageRef = ref(storage, `anexos/${user.uid}/${Date.now()}_${anexoNome}`);
                 
                 const snapshot = await uploadBytes(storageRef, file);
                 anexoUrl = await getDownloadURL(snapshot.ref);
-                // --- FIM DA LÓGICA DE UPLOAD ---
             }
 
             await addDoc(collection(db, solicitationCollectionPath), {
@@ -594,8 +593,8 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 tipo: formData.tipo,
                 dataOcorrencia: formData.dataOcorrencia,
                 justificativaTexto: formData.justificativaTexto,
-                anexoUrl: anexoUrl, // Salva a URL real do Firebase Storage
-                anexoNome: anexoNome, // Salva o nome original do arquivo
+                anexoUrl: anexoUrl,
+                anexoNome: anexoNome,
                 status: 'pendente',
                 createdAt: new Date(),
             });
@@ -608,7 +607,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
             onClose();
             setFormData({ // Limpa o formulário
                 tipo: 'abono',
-                dataOcorrencia: new Date().toISOString().split('T')[0],
+                dataOcorrencia: getTodayISOString(),
                 justificativaTexto: '',
                 anexoFile: null,
             });
@@ -857,7 +856,6 @@ const ServidorDashboard = () => {
     );
 };
 
-// --- *** ATUALIZADO *** GestorDashboard ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -869,14 +867,15 @@ const GestorDashboard = () => {
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
     
-    // States para os filtros
+    // --- NOVOS STATES PARA OS FILTROS ---
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all'); // 'all', 'null', ou um ID de unidade
     const [searchTerm, setSearchTerm] = useState('');
+    const [selectedDate, setSelectedDate] = useState(getTodayISOString()); // <-- STATE DE DATA
 
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
 
-    // Busca SOLICITAÇÕES
+    // Busca SOLICITAÇÕES (sempre busca todas)
     useEffect(() => {
         if (!isFirebaseInitialized) return;
         
@@ -891,31 +890,59 @@ const GestorDashboard = () => {
         return () => unsubscribe();
     }, [db, solicitacoesCollectionPath]);
 
-    // Busca TODOS OS SERVIDORES e seus REGISTROS DE PONTO recentes
+    // Busca TODOS OS SERVIDORES (apenas uma vez)
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setLoadingRegistros(false);
+            setLoadingRegistros(false); // Para o loading se o Firebase não estiver pronto
             return;
         }
-
-        const fetchRegistros = async () => {
-            setLoadingRegistros(true);
+        
+        const fetchServidores = async () => {
+            setLoadingRegistros(true); // Começa o loading aqui
             try {
-                // 1. Buscar todos os servidores
-                const qServidores = query(collection(db, usersCollectionPath), 
-                                          where('role', '==', 'servidor'));
-                                          
+                const qServidores = query(collection(db, usersCollectionPath), where('role', '==', 'servidor'));
                 const servidoresSnapshot = await getDocs(qServidores);
                 const servidores = servidoresSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 setServidoresDaUnidade(servidores);
+            } catch (error) {
+                 console.error("Erro ao buscar servidores:", error);
+                 setGlobalMessage({ type: 'error', title: 'Erro de Leitura', message: `Não foi possível carregar os servidores: ${error.message}`});
+                 setLoadingRegistros(false); // Para o loading se der erro
+            }
+            // Não para o loading aqui; o próximo useEffect vai parar
+        };
 
-                // 2. Para cada servidor, buscar seus 10 últimos registros de ponto
+        fetchServidores();
+    }, [db, usersCollectionPath, setGlobalMessage]);
+
+    // Busca REGISTROS DE PONTO (Executa quando a DATA ou a LISTA DE SERVIDORES muda)
+    useEffect(() => {
+        // Não executa se a lista de servidores ainda não foi carregada
+        if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
+            setLoadingRegistros(false); // Garante que o loading pare se não houver servidores
+            return;
+        }
+
+        const fetchPontosPorData = async () => {
+            setLoadingRegistros(true);
+            try {
+                // Calcular início e fim do dia para a query
+                const date = new Date(selectedDate);
+                date.setMinutes(date.getMinutes() + date.getTimezoneOffset()); // Ajusta para meia-noite UTC
+                const startOfDay = date;
+                const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1); // Fim do dia
+
                 const pontosMap = {};
-                for (const servidor of servidores) {
+                for (const servidor of servidoresDaUnidade) {
                     const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
-                    const qPontos = query(collection(db, pointCollectionPath), 
-                                          orderBy('timestamp', 'desc'), 
-                                          limit(10)); 
+                    
+                    // Nova query com filtro de data
+                    const qPontos = query(
+                        collection(db, pointCollectionPath), 
+                        where('timestamp', '>=', startOfDay),
+                        where('timestamp', '<=', endOfDay),
+                        orderBy('timestamp', 'desc') // Ordenar por data
+                    );
                     
                     const pontosSnapshot = await getDocs(qPontos);
                     pontosMap[servidor.id] = pontosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -923,19 +950,19 @@ const GestorDashboard = () => {
                 setPontosDosServidores(pontosMap);
 
             } catch (error) {
-                console.error("Erro ao buscar registros da unidade:", error);
+                console.error("Erro ao buscar pontos por data:", error);
                 setGlobalMessage({ 
                     type: 'error', 
-                    title: 'Erro de Leitura', 
-                    message: `Não foi possível carregar os registros de ponto: ${error.message}`
+                    title: 'Erro de Query', 
+                    message: `Não foi possível buscar os registros. Pode ser necessário criar um índice no Firestore. Verifique o console (F12) para um link de criação de índice.` 
                 });
             } finally {
-                setLoadingRegistros(false);
+                setLoadingRegistros(false); // Para o loading após a busca
             }
         };
 
-        fetchRegistros();
-    }, [db, usersCollectionPath, setGlobalMessage]);
+        fetchPontosPorData();
+    }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]); // Depende da data e da lista de servidores
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -954,7 +981,7 @@ const GestorDashboard = () => {
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
 
-    // Lógica de filtragem
+    // Lógica de filtragem (agora depende do selectedDate)
     const filteredServidores = useMemo(() => {
         return servidoresDaUnidade
             .filter(servidor => {
@@ -973,79 +1000,75 @@ const GestorDashboard = () => {
             });
     }, [servidoresDaUnidade, selectedUnidadeId, searchTerm]);
 
+    // Função de Gerar PDF (agora usa os dados filtrados por data)
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
-
-        try {
-            if (filteredServidores.length === 0) {
-                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
-                 return;
-            }
-
-            const doc = new jsPDF();
-            
-            let titulo = 'Relatório Geral de Servidores';
-            if (selectedUnidadeId !== 'all' && selectedUnidadeId !== 'null') {
-                titulo = `Relatório da Unidade: ${unidades[selectedUnidadeId]?.name}`;
-            } else if (selectedUnidadeId === 'null') {
-                titulo = 'Relatório de Servidores Sem Unidade';
-            }
-
-            doc.text(titulo, 14, 16);
-            doc.setFontSize(10);
-            doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22);
-
-            const corpoTabela = [];
-
-            for (const servidor of filteredServidores) {
-                const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
-                const qPontos = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc')); 
-                const pontosSnapshot = await getDocs(qPontos);
-                
-                const unidadeServidor = unidades[servidor.unidadeId]?.name || 'Sem Unidade';
-
-                corpoTabela.push([
-                    { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula}) - Unidade: ${unidadeServidor}`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
-                ]);
-
-                if (pontosSnapshot.empty) {
-                    corpoTabela.push([{ content: 'Nenhum registro encontrado.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
-                } else {
-                    pontosSnapshot.docs.forEach(pointDoc => {
-                        const ponto = pointDoc.data();
-                        corpoTabela.push([
-                            formatDateOnly(ponto.timestamp),
-                            ponto.tipo,
-                            formatTime(ponto.timestamp)
-                        ]);
-                    });
-                }
-            }
-
-            doc.autoTable({
-                startY: 30,
-                head: [['Data', 'Tipo', 'Hora']],
-                body: corpoTabela,
-                theme: 'striped',
-                headStyles: { fillColor: [22, 160, 133] },
-            });
-
-            doc.save(`relatorio_pontos.pdf`);
-
-        } catch (error) {
-            console.error("Erro ao gerar PDF:", error);
-            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível gerar o relatório: ${error.message}` });
+        
+        if (filteredServidores.length === 0) {
+            setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
+            return;
         }
+        
+        const doc = new jsPDF();
+        
+        let titulo = 'Relatório de Pontos';
+        if (selectedUnidadeId !== 'all' && selectedUnidadeId !== 'null') {
+            titulo = `Unidade: ${unidades[selectedUnidadeId]?.name}`;
+        } else if (selectedUnidadeId === 'null') {
+            titulo = 'Unidade: Servidores Sem Unidade';
+        } else {
+            titulo = 'Relatório de Todas as Unidades';
+        }
+
+        doc.text(titulo, 14, 16);
+        doc.setFontSize(12);
+        // Adiciona a data selecionada ao PDF
+        doc.text(`Data: ${new Date(selectedDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`, 14, 22);
+        doc.setFontSize(10);
+        doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 28);
+
+        const corpoTabela = [];
+
+        // Usa os servidores já filtrados
+        for (const servidor of filteredServidores) {
+            const unidadeServidor = unidades[servidor.unidadeId]?.name || 'Sem Unidade';
+
+            corpoTabela.push([
+                { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula}) - Unidade: ${unidadeServidor}`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
+            ]);
+
+            // Usa os pontos já carregados no state 'pontosDosServidores'
+            const pontos = pontosDosServidores[servidor.id];
+            if (!pontos || pontos.length === 0) {
+                corpoTabela.push([{ content: 'Nenhum registro encontrado para esta data.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
+            } else {
+                // Inverte para ordem cronológica (ASC) no PDF
+                [...pontos].reverse().forEach(ponto => {
+                    corpoTabela.push([
+                        formatDateOnly(ponto.timestamp),
+                        ponto.tipo,
+                        formatTime(ponto.timestamp)
+                    ]);
+                });
+            }
+        }
+
+        doc.autoTable({
+            startY: 35, // Desce o início da tabela
+            head: [['Data', 'Tipo', 'Hora']],
+            body: corpoTabela,
+            theme: 'striped',
+            headStyles: { fillColor: [22, 160, 133] },
+        });
+
+        doc.save(`relatorio_pontos_${selectedDate}.pdf`);
     };
 
     const getFileNameFromUrl = (url) => {
          try {
-             // Tenta decodificar a URL (para nomes com espaços, etc.)
              const decodedUrl = decodeURIComponent(url);
-             // Pega a parte depois da última '/'
              return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1);
          } catch (e) {
-             // Fallback para URLs malformadas ou simuladas
              return url.substring(url.lastIndexOf('/') + 1);
          }
     };
@@ -1096,7 +1119,6 @@ const GestorDashboard = () => {
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                {/* Filtra solicitações com base nos servidores filtrados */ }
                                 {solicitacoes
                                   .filter(sol => filteredServidores.some(s => s.id === sol.requesterId))
                                   .map(sol => (
@@ -1112,7 +1134,7 @@ const GestorDashboard = () => {
                                             {sol.anexoUrl &&
                                                 <button onClick={() => setViewingFile({ 
                                                             url: sol.anexoUrl, 
-                                                            name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl) // Usa o nome salvo
+                                                            name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl)
                                                         })} 
                                                         className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
                                                     <File className="w-3 h-3 mr-1" /> Ver Anexo
@@ -1144,10 +1166,10 @@ const GestorDashboard = () => {
                 <section className="mt-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                     <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
                         <Clock className="w-5 h-5 mr-2 text-blue-500" />
-                        Registros de Ponto Recentes (Todos Servidores)
+                        Registros de Ponto
                     </h2>
 
-                    {/* --- FILTROS ADICIONADOS --- */}
+                    {/* --- FILTROS ATUALIZADOS COM DATA --- */}
                     <div className="flex flex-col sm:flex-row gap-4 mb-6">
                         <div className="flex-1">
                             <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
@@ -1178,16 +1200,26 @@ const GestorDashboard = () => {
                                 <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
                             </div>
                         </div>
+                        {/* --- NOVO FILTRO DE DATA --- */}
+                        <div className="flex-1 sm:flex-none">
+                            <label htmlFor="dateFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data</label>
+                            <input
+                                type="date"
+                                id="dateFilter"
+                                value={selectedDate}
+                                onChange={(e) => setSelectedDate(e.target.value)}
+                                className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                            />
+                        </div>
                     </div>
 
                     {loadingRegistros ? (
                         <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
                     ) : (
                         <div className="space-y-6">
-                            {/* Usa os servidores filtrados */}
                             {filteredServidores.length === 0 ? (
                                 <p className="text-slate-500 dark:text-slate-400 text-center py-4">
-                                    {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado para esta unidade.'}
+                                    {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado.'}
                                 </p>
                             ) : (
                                 filteredServidores.map(servidor => (
@@ -1206,8 +1238,9 @@ const GestorDashboard = () => {
                                                     </tr>
                                                 </thead>
                                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                                    {pontosDosServidores[servidor.id]?.length > 0 ? (
-                                                        pontosDosServidores[servidor.id].map(ponto => (
+                                                    {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
+                                                        // Inverte a ordem para mostrar do mais cedo para o mais tarde (ASC)
+                                                        [...pontosDosServidores[servidor.id]].reverse().map(ponto => (
                                                             <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                                                 <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
                                                                 <td className="px-4 py-3 text-sm">
@@ -1220,7 +1253,9 @@ const GestorDashboard = () => {
                                                         ))
                                                     ) : (
                                                         <tr>
-                                                            <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">Nenhum registro de ponto recente.</td>
+                                                            <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                                                Nenhum registro de ponto para esta data.
+                                                            </td>
                                                         </tr>
                                                     )}
                                                 </tbody>
@@ -1277,7 +1312,7 @@ const UserManagement = () => {
             const userDocRef = doc(db, usersCollectionPath, editingUser.id);
             await updateDoc(userDocRef, {
                 role: editingUser.role,
-                unidadeId: editingUser.unidadeId || null, // Garante 'null' se "Sem Unidade" for escolhido
+                unidadeId: editingUser.unidadeId || null, 
                 nome: editingUser.nome,
                 matricula: editingUser.matricula
             });
@@ -1553,14 +1588,7 @@ const MessageBoxForAllUsers = () => {
             <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
             <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
             <form onSubmit={handleSendMessage} className="space-y-3">
-                <textarea value={message} onChange={(e) => setMessage(e.targ
-
-
-
-
-
-
-et.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
                 <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
                      {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
                      {loading ? 'Enviando...' : 'Enviar Mensagem'}
@@ -1665,3 +1693,4 @@ export default function App() {
         </ThemeProvider>
     );
 }
+
