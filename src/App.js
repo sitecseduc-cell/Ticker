@@ -551,7 +551,8 @@ const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
                                 <li key={reader.matricula} className="py-2">
                                     <p className="font-medium text-slate-700 dark:text-slate-200">{reader.nome} ({reader.matricula})</p>
                                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Ciente em: {formatDateOnly(reader.readAt.toDate())} às {formatTime(reader.readAt.toDate())}
+                                        {/* Adiciona verificação se readAt existe antes de formatar */}
+                                        Ciente em: {reader.readAt ? `${formatDateOnly(reader.readAt.toDate())} às ${formatTime(reader.readAt.toDate())}` : 'Data indisponível'}
                                     </p>
                                 </li>
                             ))}
@@ -571,15 +572,13 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     
     // --- CORREÇÃO PARA O LINTER DA VERCEL ---
-    // Lê a preferência do localStorage
+    // Lê a preferência do localStorage *antes* de qualquer hook
     const initialRememberMe = localStorage.getItem('rememberMePreference') === 'true';
+    const initialEmail = initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : '';
+    // --- FIM DA CORREÇÃO ---
     
     const [rememberMe, setRememberMe] = useState(initialRememberMe);
-    const [email, setEmail] = useState(() => 
-        // Usa a variável, não o state (que ainda não foi inicializado)
-        initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : ''
-    );
-    // --- FIM DA CORREÇÃO ---
+    const [email, setEmail] = useState(initialEmail);
     
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -876,7 +875,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 };
 
 const ServidorDashboard = () => {
-    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
+    const { user, userId, db, handleLogout, unidades, globalMessages, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
@@ -889,6 +888,9 @@ const ServidorDashboard = () => {
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${userId}`) || 0; // Chave por usuário
+
+    // --- NOVO: State para o modal de leituras (embora o servidor não use, o gestor sim) ---
+    const [viewingMessageReads, setViewingMessageReads] = useState(null);
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -949,6 +951,7 @@ const ServidorDashboard = () => {
                 }
             });
 
+            // Considera o dia atual como "em andamento" se não houver 'saida'
             if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
                 totalWorkedMs += (new Date().getTime() - currentSegmentStart);
             }
@@ -958,10 +961,13 @@ const ServidorDashboard = () => {
             if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
                  day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
             } else {
-                 day.balanceMs = 0;
+                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
             }
 
-            totalBalanceMs += day.balanceMs;
+            // Apenas adiciona ao saldo total se o dia foi finalizado
+            if (day.balanceMs !== 0) {
+                totalBalanceMs += day.balanceMs;
+            }
         });
         return { summary, totalBalanceMs };
     }, [points]);
@@ -971,7 +977,44 @@ const ServidorDashboard = () => {
         dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
         const dateKey = formatDateOnly(dateObj);
         
-        return dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
+        const day = dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
+
+        // Recalcula o saldo do dia selecionado (especialmente para 'hoje' em andamento)
+        let totalWorkedMs = 0;
+        let currentSegmentStart = null;
+        day.points.forEach(p => {
+            const type = p.tipo;
+            const timestamp = p.timestamp.toDate().getTime();
+            if (type === 'entrada' || type === 'volta') {
+                if(currentSegmentStart === null) currentSegmentStart = timestamp;
+            } else if ((type === 'saida' || type === 'pausa') && currentSegmentStart !== null) {
+                totalWorkedMs += (timestamp - currentSegmentStart);
+                currentSegmentStart = null;
+            }
+        });
+
+        // Se for hoje e ainda estiver trabalhando
+        if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
+            totalWorkedMs += (new Date().getTime() - currentSegmentStart);
+        }
+        
+        day.totalMs = totalWorkedMs;
+
+        // Calcula o saldo do dia (mesmo que não finalizado)
+        const lastPointOfDay = day.points[day.points.length - 1];
+        if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+            day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
+        } else if (dateKey === formatDateOnly(new Date())) {
+            // Se for hoje e não estiver finalizado, o saldo é 0 (ou o total trabalhado - meta, se preferir)
+            // Vamos manter como 0 para não confundir com horas extras
+            day.balanceMs = 0; 
+        } else {
+            // Se for um dia passado não finalizado, o saldo é negativo
+            day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
+        }
+
+
+        return day;
     }, [dailySummary.summary, viewDate]);
 
     const isShiftFinishedToday = useMemo(() => {
@@ -1028,7 +1071,9 @@ const ServidorDashboard = () => {
     };
     const currentButton = buttonMap[nextPointType];
     
+    // Saldo do dia selecionado (para o card principal)
     const selectedDayBalanceMs = selectedDayData.balanceMs;
+    // Saldo total (para o texto pequeno)
     const totalBalanceMs = dailySummary.totalBalanceMs;
 
     return (
@@ -1082,9 +1127,9 @@ const ServidorDashboard = () => {
                                <p className={`text-2xl font-bold mt-1 ${nextPointType === 'finished' ? 'text-slate-500 dark:text-slate-400' : 'text-blue-600 dark:text-blue-400'}`}>{currentButton.label}</p>
                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Último: {lastPoint ? `${lastPoint.tipo} às ${formatTime(lastPoint.timestamp)}` : 'Nenhum registro hoje'}</p>
                             </div>
-                            <button onClick={() => registerPoint(nextPointType)} disabled={clockInLoading || nextPointType === 'finished'} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
+                            <button onClick={() => registerPoint(nextPointType)} disabled={clockInLoading || (viewDate !== getTodayISOString())} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
                                 {clockInLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <currentButton.icon className="w-5 h-5 mr-2" />}
-                                {clockInLoading ? 'Processando...' : currentButton.label}
+                                {clockInLoading ? 'Processando...' : (viewDate !== getTodayISOString() ? 'Visualizando outro dia' : currentButton.label)}
                             </button>
                         </div>
                     </div>
@@ -1191,6 +1236,8 @@ const ServidorDashboard = () => {
                     onClose={() => setIsNotificationListOpen(false)} 
                     messages={globalMessages}
                     role="servidor"
+                    onDelete={() => {}} // Servidor não pode deletar
+                    onViewReads={() => {}} // Servidor não pode ver quem leu
                  />
             </div>
         </div>
@@ -1675,11 +1722,24 @@ const UserManagement = () => {
     const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
     // --- CORREÇÃO DO ERRO DA VERCEL ---
-    // Apenas define loading como 'false' quando 'allUsers' (do contexto) for carregado.
+    // Removemos o useEffect que chamava setAllUsers.
+    // Apenas definimos o loading como false quando 'allUsers' (do contexto) for carregado.
     useEffect(() => {
-        setLoading(false);
-    }, [allUsers]);
+        if (!isFirebaseInitialized) {
+            setLoading(false);
+            return;
+        }
+        // allUsers é carregado no AuthProvider, esperamos ele
+        if (allUsers.length > 0 || !isLoading) { // isLoading vem do AuthProvider, mas não temos aqui. Usamos allUsers.
+             setLoading(false);
+        }
+        // Se allUsers estiver vazio E o app ainda estiver carregando, o loading continua true
+        // Mas como este componente só é renderizado *após* o AppContent (que checa isLoading),
+        // podemos simplificar:
+        setLoading(false); 
+    }, [allUsers, isFirebaseInitialized]);
     // --- FIM DA CORREÇÃO ---
+
 
     const handleUpdateUser = async (e) => {
         e.preventDefault();
@@ -2191,4 +2251,3 @@ export default function App() {
         </ThemeProvider>
     );
 }
-
