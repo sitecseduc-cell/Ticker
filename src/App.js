@@ -11,7 +11,7 @@ import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell, Eye, BellRing // <-- Ícones adicionados
+    Calendar, Bell, Eye, BellRing // <-- Ícones para as novas funções
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -527,7 +527,8 @@ const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
 
     const readers = useMemo(() => {
         if (!message.readBy) return [];
-        return Object.values(message.readBy).sort((a,b) => a.nome.localeCompare(b.nome));
+        // Transforma o map 'readBy' em um array e ordena por nome
+        return Object.values(message.readBy).sort((a, b) => a.nome.localeCompare(b.nome));
     }, [message]);
 
     return (
@@ -1478,8 +1479,7 @@ const GestorDashboard = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                    {solicitacoes
-                                      .map(sol => (
+                                    {solicitacoes.map(sol => (
                                         <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                             <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
                                             <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
@@ -1932,9 +1932,9 @@ const UnitManagement = () => {
     );
 };
 
-// --- *** ATUALIZADO *** Componente de Gerenciamento de Mensagens ---
+// --- Componente de Gerenciamento de Mensagens (Reutilizável) ---
 const GlobalMessagesManager = ({ role }) => {
-    const { user: currentUser, db, globalMessages, allUsers } = useAuthContext();
+    const { user: currentUser, db, globalMessages } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
@@ -1951,7 +1951,7 @@ const GlobalMessagesManager = ({ role }) => {
                 senderName: currentUser.nome,
                 senderRole: currentUser.role,
                 createdAt: new Date(),
-                readBy: {}, // <-- NOVO: Inicia campo de leituras
+                readBy: {}, // Inicia campo de leituras
             });
             setGlobalMessage({ type: 'success', title: 'Mensagem Enviada', message: 'Sua mensagem foi enviada para todos os usuários.' });
             setMessage('');
@@ -2099,10 +2099,8 @@ const AppContent = () => {
         const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
         const newestMsg = globalMessages[0];
         
-        // Verifica se a mensagem mais recente é mais nova que a última lida
         if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
             // Verifica se o usuário atual já não está na lista 'readBy'
-            // (pode acontecer se ele leu em outro dispositivo)
             const alreadyRead = newestMsg.readBy && newestMsg.readBy[user.uid];
             
             if (!alreadyRead) {
