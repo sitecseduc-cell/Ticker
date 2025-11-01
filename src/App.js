@@ -567,12 +567,12 @@ const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
     );
 };
 
+// --- *** ATUALIZADO *** LoginScreen ---
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     
-    // --- CORREÇÃO PARA O LINTER DA VERCEL ---
-    // Lê a preferência do localStorage *antes* de qualquer hook
+    // --- CORREÇÃO VERCEL: Lê o localStorage *antes* dos hooks ---
     const initialRememberMe = localStorage.getItem('rememberMePreference') === 'true';
     const initialEmail = initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : '';
     // --- FIM DA CORREÇÃO ---
@@ -754,7 +754,7 @@ const formatDateOnly = (timestamp) => {
     return date.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' });
 };
 const formatDuration = (ms) => {
-    if (!ms) return '00:00'; 
+    if (ms === null || ms === undefined) return '00:00'; 
     const sign = ms < 0 ? '-' : '+';
     const absMs = Math.abs(ms);
     const totalSeconds = Math.round(absMs / 1000);
@@ -889,7 +889,6 @@ const ServidorDashboard = () => {
     const [unreadCount, setUnreadCount] = useState(0);
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${userId}`) || 0; // Chave por usuário
 
-    // --- NOVO: State para o modal de leituras (embora o servidor não use, o gestor sim) ---
     const [viewingMessageReads, setViewingMessageReads] = useState(null);
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
@@ -1710,6 +1709,7 @@ const GestorDashboard = () => {
     );
 };
 
+// --- *** ATUALIZADO *** UserManagement ---
 const UserManagement = () => {
     const { db, unidades, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1721,22 +1721,12 @@ const UserManagement = () => {
 
     const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
-    // --- CORREÇÃO DO ERRO DA VERCEL ---
-    // Removemos o useEffect que chamava setAllUsers.
-    // Apenas definimos o loading como false quando 'allUsers' (do contexto) for carregado.
+    // --- CORREÇÃO VERCEL: 'setAllUsers' removido ---
     useEffect(() => {
-        if (!isFirebaseInitialized) {
+        // Apenas define loading como 'false' quando 'allUsers' (do contexto) for carregado.
+        if (allUsers.length > 0 || !isFirebaseInitialized) {
             setLoading(false);
-            return;
         }
-        // allUsers é carregado no AuthProvider, esperamos ele
-        if (allUsers.length > 0 || !isLoading) { // isLoading vem do AuthProvider, mas não temos aqui. Usamos allUsers.
-             setLoading(false);
-        }
-        // Se allUsers estiver vazio E o app ainda estiver carregando, o loading continua true
-        // Mas como este componente só é renderizado *após* o AppContent (que checa isLoading),
-        // podemos simplificar:
-        setLoading(false); 
     }, [allUsers, isFirebaseInitialized]);
     // --- FIM DA CORREÇÃO ---
 
@@ -2251,3 +2241,4 @@ export default function App() {
         </ThemeProvider>
     );
 }
+
