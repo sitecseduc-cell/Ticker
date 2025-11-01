@@ -11,7 +11,7 @@ import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell, Eye, BellRing // <-- Ícones para as novas funções
+    Calendar, Bell, Eye, BellRing
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -551,7 +551,7 @@ const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
                                 <li key={reader.matricula} className="py-2">
                                     <p className="font-medium text-slate-700 dark:text-slate-200">{reader.nome} ({reader.matricula})</p>
                                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Ciente em: {formatDateOnly(reader.readAt)} às {formatTime(reader.readAt)}
+                                        Ciente em: {formatDateOnly(reader.readAt.toDate())} às {formatTime(reader.readAt.toDate())}
                                     </p>
                                 </li>
                             ))}
@@ -570,12 +570,16 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     
-    const [rememberMe, setRememberMe] = useState(() => 
-        localStorage.getItem('rememberMePreference') === 'true'
-    );
+    // --- CORREÇÃO PARA O LINTER DA VERCEL ---
+    // Lê a preferência do localStorage
+    const initialRememberMe = localStorage.getItem('rememberMePreference') === 'true';
+    
+    const [rememberMe, setRememberMe] = useState(initialRememberMe);
     const [email, setEmail] = useState(() => 
-        rememberMe ? localStorage.getItem('rememberedEmail') || '' : ''
+        // Usa a variável, não o state (que ainda não foi inicializado)
+        initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : ''
     );
+    // --- FIM DA CORREÇÃO ---
     
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -1254,6 +1258,7 @@ const GestorDashboard = () => {
     useEffect(() => {
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
             setLoadingRegistros(false); 
+            setPontosDosServidores({}); // Limpa os pontos se não houver data ou servidores
             return;
         }
 
@@ -1262,8 +1267,8 @@ const GestorDashboard = () => {
             try {
                 const date = new Date(selectedDate);
                 date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
-                const startOfDay = date;
-                const endOfDay = new Date(startOfDay.getTime() + 24 * 60 * 60 * 1000 - 1);
+                const startOfDay = new Date(date.setHours(0, 0, 0, 0));
+                const endOfDay = new Date(date.setHours(23, 59, 59, 999));
 
                 const pontosMap = {};
                 for (const servidor of servidoresDaUnidade) {
@@ -1669,16 +1674,12 @@ const UserManagement = () => {
 
     const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
+    // --- CORREÇÃO DO ERRO DA VERCEL ---
+    // Apenas define loading como 'false' quando 'allUsers' (do contexto) for carregado.
     useEffect(() => {
-        if (!isFirebaseInitialized) {
-            setAllUsers([
-                {id: 'demo1', nome: 'Admin Demo', matricula: '001', role: 'rh', unidadeId: 'unidade-adm-01'},
-                {id: 'demo2', nome: 'Gestor Demo', matricula: '002', role: 'gestor', unidadeId: 'unidade-esc-01'},
-                {id: 'demo3', nome: 'Servidor Demo', matricula: '003', role: 'servidor', unidadeId: 'unidade-esc-01'},
-            ]);
-        }
         setLoading(false);
     }, [allUsers]);
+    // --- FIM DA CORREÇÃO ---
 
     const handleUpdateUser = async (e) => {
         e.preventDefault();
@@ -1934,7 +1935,7 @@ const UnitManagement = () => {
 
 // --- Componente de Gerenciamento de Mensagens (Reutilizável) ---
 const GlobalMessagesManager = ({ role }) => {
-    const { user: currentUser, db, globalMessages } = useAuthContext();
+    const { user: currentUser, db, globalMessages, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
@@ -2100,7 +2101,6 @@ const AppContent = () => {
         const newestMsg = globalMessages[0];
         
         if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
-            // Verifica se o usuário atual já não está na lista 'readBy'
             const alreadyRead = newestMsg.readBy && newestMsg.readBy[user.uid];
             
             if (!alreadyRead) {
