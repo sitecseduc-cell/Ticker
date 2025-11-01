@@ -114,7 +114,7 @@ const AuthProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [unidades, setUnidades] = useState({});
     const [globalMessages, setGlobalMessages] = useState([]);
-    const [allUsers, setAllUsers] = useState([]); // <-- NOVO: Armazena todos os usuários
+    const [allUsers, setAllUsers] = useState([]); // <-- Armazena todos os usuários
 
     // Carregar unidades
     useEffect(() => {
@@ -167,14 +167,13 @@ const AuthProvider = ({ children }) => {
                     const userData = { uid: firebaseUser.uid, ...userSnap.data() };
                     setUser(userData);
 
-                    // --- NOVO: Se for Gestor ou RH, busca todos os usuários ---
+                    // Se for Gestor ou RH, busca todos os usuários para o rastreio de "lido"
                     if (userData.role === 'gestor' || userData.role === 'rh') {
                         const usersRef = collection(db, `artifacts/${appId}/public/data/${USER_COLLECTION}`);
                         const qUsers = query(usersRef);
                         const usersSnapshot = await getDocs(qUsers);
                         setAllUsers(usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
                     }
-                    // --- FIM NOVO ---
                     
                 } else {
                     console.error("Usuário autenticado não encontrado no Firestore. Fazendo logout.");
@@ -265,7 +264,7 @@ const AuthProvider = ({ children }) => {
         isLoading,
         unidades,
         globalMessages,
-        allUsers, // <-- ADICIONADO
+        allUsers, // <-- Passa a lista de usuários para o contexto
         handleLogin,
         handleLogout,
         handleSignUp,
@@ -273,7 +272,7 @@ const AuthProvider = ({ children }) => {
         db,
         auth,
         storage 
-    }), [user, isLoading, unidades, globalMessages, allUsers, handleLogin, handleLogout, handleSignUp, handleForgotPassword]); // <-- Dependências atualizadas
+    }), [user, isLoading, unidades, globalMessages, allUsers, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -419,7 +418,7 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     );
 };
 
-// --- *** ATUALIZADO *** Modal de Nova Mensagem ---
+// Modal para exibir a *nova* mensagem global
 const NewMessageModal = ({ isOpen, onClose, message, onAcknowledge }) => {
     const [loading, setLoading] = useState(false);
 
@@ -462,8 +461,8 @@ const NewMessageModal = ({ isOpen, onClose, message, onAcknowledge }) => {
     );
 };
 
-// --- *** ATUALIZADO *** Modal de Histórico de Mensagens ---
-const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, allUsers, role, onDelete, onViewReads }) => {
+// Modal para exibir *todas* as mensagens globais
+const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, role, onDelete, onViewReads }) => {
     if (!isOpen) return null;
     const canManage = role === 'rh' || role === 'gestor';
 
@@ -490,7 +489,7 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, allUsers, role, 
                                     </p>
                                     <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
                                     
-                                    {/* --- NOVO: Ações do Admin/Gestor --- */}
+                                    {/* Ações do Admin/Gestor */}
                                     {canManage && (
                                         <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
                                             <button 
@@ -522,9 +521,8 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, allUsers, role, 
     );
 };
 
-// --- NOVO COMPONENTE ---
 // Modal para exibir *quem* leu a mensagem
-const MessageReadStatusModal = ({ isOpen, onClose, message, allUsers }) => {
+const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
     if (!isOpen || !message) return null;
 
     const readers = useMemo(() => {
@@ -543,16 +541,16 @@ const MessageReadStatusModal = ({ isOpen, onClose, message, allUsers }) => {
                     <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">Mensagem: "{message.text}"</p>
                 </div>
                 <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-100">{readers.length} Servidores leram esta mensagem:</h4>
+                    <h4 className="font-semibold text-slate-800 dark:text-slate-100">{readers.length} Servidores marcaram como ciente:</h4>
                     {readers.length === 0 ? (
-                        <p className="text-slate-500 dark:text-slate-400 text-center py-8">Ninguém leu esta mensagem ainda.</p>
+                        <p className="text-slate-500 dark:text-slate-400 text-center py-8">Ninguém marcou esta mensagem como ciente ainda.</p>
                     ) : (
                         <ul className="divide-y dark:divide-gray-700">
                             {readers.map(reader => (
                                 <li key={reader.matricula} className="py-2">
                                     <p className="font-medium text-slate-700 dark:text-slate-200">{reader.nome} ({reader.matricula})</p>
                                     <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        Lido em: {formatDateOnly(reader.readAt)} às {formatTime(reader.readAt)}
+                                        Ciente em: {formatDateOnly(reader.readAt)} às {formatTime(reader.readAt)}
                                     </p>
                                 </li>
                             ))}
@@ -872,7 +870,6 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
-// --- *** ATUALIZADO *** ServidorDashboard ---
 const ServidorDashboard = () => {
     const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1188,14 +1185,13 @@ const ServidorDashboard = () => {
                     isOpen={isNotificationListOpen} 
                     onClose={() => setIsNotificationListOpen(false)} 
                     messages={globalMessages}
-                    role="servidor" // <-- Função limitada (apenas visualização)
+                    role="servidor"
                  />
             </div>
         </div>
     );
 };
 
-// --- *** ATUALIZADO *** GestorDashboard ---
 const GestorDashboard = () => {
     const { user, db, handleLogout, unidades, globalMessages, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1210,15 +1206,13 @@ const GestorDashboard = () => {
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDate, setSelectedDate] = useState(getTodayISOString());
-    const [activeTab, setActiveTab] = useState('solicitacoes'); // <-- NOVO STATE de TABS
+    const [activeTab, setActiveTab] = useState('solicitacoes'); 
 
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
     
-    // --- NOVO: State para o modal de leituras ---
     const [viewingMessageReads, setViewingMessageReads] = useState(null);
-
 
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -1252,10 +1246,9 @@ const GestorDashboard = () => {
             return;
         }
         
-        // A lista de `allUsers` agora vem do context, então podemos usar `setServidoresDaUnidade`
         setServidoresDaUnidade(allUsers.filter(u => u.role === 'servidor'));
 
-    }, [allUsers]); // <-- Depende de allUsers do contexto
+    }, [allUsers]);
 
     useEffect(() => {
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
@@ -1403,7 +1396,6 @@ const GestorDashboard = () => {
          }
     };
     
-    // Abre o modal de lista e marca as mensagens como lidas
     const openNotificationList = () => {
         setIsNotificationListOpen(true);
         if (globalMessages.length > 0) {
@@ -1412,7 +1404,6 @@ const GestorDashboard = () => {
         setUnreadCount(0);
     };
     
-    // --- NOVO: Handle para deletar mensagem ---
     const handleDeleteMessage = async (messageId) => {
         if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
         
@@ -1459,7 +1450,6 @@ const GestorDashboard = () => {
                     </div>
                 </header>
 
-                {/* --- NOVO: Abas de Navegação --- */}
                 <div className="border-b mb-6 dark:border-gray-800">
                     <nav className="flex space-x-2">
                          <button onClick={() => setActiveTab('solicitacoes')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'solicitacoes' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Mail className="w-4 h-4 mr-2" /> Solicitações</button>
@@ -1467,9 +1457,7 @@ const GestorDashboard = () => {
                          <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><MessageSquare className="w-4 h-4 mr-2" /> Mensagem Global</button>
                     </nav>
                 </div>
-                {/* --- FIM DAS NOVAS ABAS --- */}
 
-                {/* --- ABA DE SOLICITAÇÕES --- */}
                 {activeTab === 'solicitacoes' && (
                     <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
@@ -1490,7 +1478,8 @@ const GestorDashboard = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                    {solicitacoes.map(sol => (
+                                    {solicitacoes
+                                      .map(sol => (
                                         <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                             <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
                                             <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
@@ -1533,7 +1522,6 @@ const GestorDashboard = () => {
                     </section>
                 )}
 
-                {/* --- ABA DE REGISTROS DE PONTO --- */}
                 {activeTab === 'registros' && (
                     <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
@@ -1646,7 +1634,6 @@ const GestorDashboard = () => {
                     </section>
                 )}
                 
-                {/* --- ABA DE MENSAGEM GLOBAL --- */}
                 {activeTab === 'messages' && (
                     <GlobalMessagesManager role="gestor" />
                 )}
@@ -1656,12 +1643,11 @@ const GestorDashboard = () => {
                     isOpen={isNotificationListOpen} 
                     onClose={() => setIsNotificationListOpen(false)} 
                     messages={globalMessages}
-                    role="gestor" // <-- Papel 'gestor'
+                    role="gestor"
                     allUsers={allUsers}
                     onDelete={handleDeleteMessage}
                     onViewReads={setViewingMessageReads}
                 />
-                {/* --- NOVO: Modal de Status de Leitura --- */}
                 <MessageReadStatusModal
                     isOpen={!!viewingMessageReads}
                     onClose={() => setViewingMessageReads(null)}
@@ -1673,9 +1659,9 @@ const GestorDashboard = () => {
 };
 
 const UserManagement = () => {
-    const { db, unidades, allUsers } = useAuthContext(); // <-- allUsers do contexto
+    const { db, unidades, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const [loading, setLoading] = useState(true); // Começa como true
+    const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [editingUser, setEditingUser] = useState(null);
     const [userToDelete, setUserToDelete] = useState(null);
@@ -1683,17 +1669,16 @@ const UserManagement = () => {
 
     const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
-    // --- ATUALIZADO: Não busca mais usuários, apenas usa o do contexto ---
     useEffect(() => {
         if (!isFirebaseInitialized) {
-            setAllUsers([ // Define 'allUsers' se não inicializado (para demo)
+            setAllUsers([
                 {id: 'demo1', nome: 'Admin Demo', matricula: '001', role: 'rh', unidadeId: 'unidade-adm-01'},
                 {id: 'demo2', nome: 'Gestor Demo', matricula: '002', role: 'gestor', unidadeId: 'unidade-esc-01'},
                 {id: 'demo3', nome: 'Servidor Demo', matricula: '003', role: 'servidor', unidadeId: 'unidade-esc-01'},
             ]);
         }
-        setLoading(false); // Para de carregar
-    }, [allUsers]); // Reage à mudança em allUsers
+        setLoading(false);
+    }, [allUsers]);
 
     const handleUpdateUser = async (e) => {
         e.preventDefault();
@@ -2098,7 +2083,6 @@ const Footer = () => {
     );
 };
 
-// --- *** ATUALIZADO *** AppContent ---
 const AppContent = () => {
     const { user, role, isLoading, globalMessages, db } = useAuthContext();
     const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
@@ -2106,6 +2090,7 @@ const AppContent = () => {
     const [newestMessage, setNewestMessage] = useState(null);
     const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
 
+    // Verifica novas mensagens ao logar ou quando novas mensagens chegam
     useEffect(() => {
         if (!user || globalMessages.length === 0) {
             return;
@@ -2114,14 +2099,21 @@ const AppContent = () => {
         const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
         const newestMsg = globalMessages[0];
         
+        // Verifica se a mensagem mais recente é mais nova que a última lida
         if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
-            setNewestMessage(newestMsg);
-            setIsNewMessageModalOpen(true);
+            // Verifica se o usuário atual já não está na lista 'readBy'
+            // (pode acontecer se ele leu em outro dispositivo)
+            const alreadyRead = newestMsg.readBy && newestMsg.readBy[user.uid];
+            
+            if (!alreadyRead) {
+                setNewestMessage(newestMsg);
+                setIsNewMessageModalOpen(true);
+            }
         }
         
     }, [globalMessages, user]);
     
-    // --- ATUALIZADO: Agora é async e salva no Firestore ---
+    // Marca a mensagem como ciente no Firestore
     const handleAcknowledgeMessage = async (messageId) => {
         if (!messageId || !user) return;
 
@@ -2141,7 +2133,7 @@ const AppContent = () => {
                 }
             });
         } catch (error) {
-            console.error("Erro ao marcar mensagem como lida:", error);
+            console.error("Erro ao marcar mensagem como cida:", error);
         }
 
         setIsNewMessageModalOpen(false);
