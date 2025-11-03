@@ -1433,7 +1433,7 @@ const GestorDashboard = () => {
         fetchPontosPorData();
     }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
 
-    // --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
+// --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
     const handleUpdatePointTime = async (newTime, observacao) => { // <-- MODIFICADO
         if (!editingPoint) return;
         
@@ -1779,13 +1779,12 @@ const GestorDashboard = () => {
                                                         <tr>
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Observação</th> {/* <-- ADICIONADO */}
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
-                                                            {/* --- NOVA COLUNA DE AÇÕES --- */}
+                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Observação</th> {/* <-- ADICIONADO */}
                                                             <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Ações</th>
                                                         </tr>
                                                     </thead>
-                                                    <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                                   <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                                                         {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
                                                             pontosDosServidores[servidor.id].map(ponto => (
                                                                 <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
@@ -1814,7 +1813,6 @@ const GestorDashboard = () => {
                                                             ))
                                                         ) : (
                                                             <tr>
-                                                                {/* Atualiza o colSpan para 5 por causa da nova coluna */}
                                                                 <td colSpan="5" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                                                     Nenhum registro de ponto para esta data.
                                                                 </td>
