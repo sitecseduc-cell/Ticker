@@ -1653,42 +1653,46 @@ const GestorDashboard = () => {
                                     </tr>
                                 </thead>
                                 <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                    {solicitacoes.map(sol => (
-                                        <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                            <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
-                                            <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
-                                            <td className="px-4 py-4">
-                                                <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
-                                                <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
-                                            </td>
-                                            <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
-                                                <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
-                                                {sol.anexoUrl &&
-                                                    <button onClick={() => setViewingFile({ 
-                                                                url: sol.anexoUrl, 
-                                                                name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl)
-                                                            })} 
-                                                            className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
-                                                        <File className="w-3 h-3 mr-1" /> Ver Anexo
-                                                    </button>
-                                                }
-                                            </td>
-                                            <td className="px-4 py-4">
-                                                {sol.status === 'pendente' ? (
-                                                    <div className="flex items-center space-x-2">
-                                                        <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
-                                                            {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                    {/* INÍCIO DA CORREÇÃO */}
+                                    {solicitacoes.length > 0 ? (
+                                        solicitacoes.map(sol => (
+                                            <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                                <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
+                                                <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
+                                                <td className="px-4 py-4">
+                                                    <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
+                                                </td>
+                                                <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
+                                                    <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
+                                                    {sol.anexoUrl &&
+                                                        <button onClick={() => setViewingFile({ 
+                                                                    url: sol.anexoUrl, 
+                                                                    name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl)
+                                                                })} 
+                                                                className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
+                                                            <File className="w-3 h-3 mr-1" /> Ver Anexo
                                                         </button>
-                                                        <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
-                                                            {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
-                                                        </button>
-                                                    </div>
-                                                    <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
-                                                )}
-                                            </td>
-                                        </tr>
-                                        ))    
-                                    {solicitacoes.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
+                                                    }
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    {sol.status === 'pendente' ? (
+                                                        <div className="flex items-center space-x-2">
+                                                            <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                                {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                            </button>
+                                                            <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                                {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                            </button>
+                                                        </div>
+                                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                        <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>
+                                    )}
+                                    {/* FIM DA CORREÇÃO */}
                                 </tbody>
                             </table>
                         </div>
