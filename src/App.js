@@ -1652,7 +1652,7 @@ const GestorDashboard = () => {
                                         <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
                                     </tr>
                                 </thead>
-                                <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                               <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                                     {/* INÍCIO DA CORREÇÃO */}
                                     {solicitacoes.length > 0 ? (
                                         solicitacoes.map(sol => (
@@ -1685,13 +1685,13 @@ const GestorDashboard = () => {
                                                                 {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
                                                             </button>
                                                         </div>
-                                                    
+                                                    ) : (
                                                         <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
                                                     )}
                                                 </td>
                                             </tr>
                                         ))
-                                    
+                                    ) : (
                                         <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>
                                     )}
                                     {/* FIM DA CORREÇÃO */}
