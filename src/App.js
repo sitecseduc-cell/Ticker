@@ -1685,11 +1685,13 @@ const GestorDashboard = () => {
                                                                 {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
                                                             </button>
                                                         </div>
+                                                    ) : (
                                                         <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
                                                     )}
                                                 </td>
                                             </tr>
                                         ))
+                                    ) : (
                                         <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>
                                     )}
                                     {/* FIM DA CORREÇÃO */}
