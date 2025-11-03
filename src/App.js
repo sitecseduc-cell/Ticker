@@ -4,14 +4,14 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit, Timestamp
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit, Timestamp // <-- Timestamp importado
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell, Eye, BellRing
+    Calendar, Bell, Eye, BellRing, Edit3 // <-- Ícone de Edição adicionado
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -114,7 +114,7 @@ const AuthProvider = ({ children }) => {
     const [isLoading, setIsLoading] = useState(true);
     const [unidades, setUnidades] = useState({});
     const [globalMessages, setGlobalMessages] = useState([]);
-    const [allUsers, setAllUsers] = useState([]); // <-- Armazena todos os usuários
+    const [allUsers, setAllUsers] = useState([]); 
 
     // Carregar unidades
     useEffect(() => {
@@ -167,7 +167,6 @@ const AuthProvider = ({ children }) => {
                     const userData = { uid: firebaseUser.uid, ...userSnap.data() };
                     setUser(userData);
 
-                    // Se for Gestor ou RH, busca todos os usuários para o rastreio de "lido"
                     if (userData.role === 'gestor' || userData.role === 'rh') {
                         const usersRef = collection(db, `artifacts/${appId}/public/data/${USER_COLLECTION}`);
                         const qUsers = query(usersRef);
@@ -264,7 +263,7 @@ const AuthProvider = ({ children }) => {
         isLoading,
         unidades,
         globalMessages,
-        allUsers, // <-- Passa a lista de usuários para o contexto
+        allUsers,
         handleLogin,
         handleLogout,
         handleSignUp,
@@ -567,7 +566,73 @@ const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
     );
 };
 
-// --- *** ATUALIZADO *** LoginScreen ---
+// --- NOVO COMPONENTE: Modal de Edição de Ponto ---
+const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
+    const [newTime, setNewTime] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        if (point && point.timestamp) {
+            // Formata o timestamp original para HH:MM
+            const d = point.timestamp.toDate();
+            const hours = String(d.getHours()).padStart(2, '0');
+            const minutes = String(d.getMinutes()).padStart(2, '0');
+            setNewTime(`${hours}:${minutes}`);
+        }
+    }, [point]);
+
+    if (!isOpen || !point) return null;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        await onSave(newTime);
+        setLoading(false);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <form onSubmit={handleSave} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Ajustar Registro de Ponto</h3>
+                <div className="mt-4 space-y-2">
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Servidor: <span className="font-semibold">{point.servidorNome}</span>
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Data: <span className="font-semibold">{formatDateOnly(point.timestamp)}</span>
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Tipo: <span className="font-semibold">{point.tipo.toUpperCase()}</span>
+                    </p>
+                    <div className="pt-2">
+                        <label htmlFor="time-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Novo Horário:
+                        </label>
+                        <input
+                            type="time"
+                            id="time-input"
+                            value={newTime}
+                            onChange={(e) => setNewTime(e.target.value)}
+                            required
+                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                    <button type="button" onClick={onClose} className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 dark:bg-gray-700 dark:text-slate-200 dark:hover:bg-gray-600 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" disabled={loading} className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400 flex items-center">
+                        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Salvar Ajuste
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+
+
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -575,10 +640,10 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     // --- CORREÇÃO VERCEL: Lê o localStorage *antes* dos hooks ---
     const initialRememberMe = localStorage.getItem('rememberMePreference') === 'true';
     const initialEmail = initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : '';
-    // --- FIM DA CORREÇÃO ---
     
     const [rememberMe, setRememberMe] = useState(initialRememberMe);
     const [email, setEmail] = useState(initialEmail);
+    // --- FIM DA CORREÇÃO ---
     
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -875,7 +940,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 };
 
 const ServidorDashboard = () => {
-    const { user, userId, db, handleLogout, unidades, globalMessages, allUsers } = useAuthContext();
+    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
@@ -888,8 +953,6 @@ const ServidorDashboard = () => {
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${userId}`) || 0; // Chave por usuário
-
-    const [viewingMessageReads, setViewingMessageReads] = useState(null);
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -1235,8 +1298,8 @@ const ServidorDashboard = () => {
                     onClose={() => setIsNotificationListOpen(false)} 
                     messages={globalMessages}
                     role="servidor"
-                    onDelete={() => {}} // Servidor não pode deletar
-                    onViewReads={() => {}} // Servidor não pode ver quem leu
+                    onDelete={() => {}} 
+                    onViewReads={() => {}} 
                  />
             </div>
         </div>
@@ -1264,6 +1327,9 @@ const GestorDashboard = () => {
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
     
     const [viewingMessageReads, setViewingMessageReads] = useState(null);
+    
+    // --- NOVO: State para o modal de edição de ponto ---
+    const [editingPoint, setEditingPoint] = useState(null); // { ponto, servidorId, servidorNome }
 
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -1324,7 +1390,7 @@ const GestorDashboard = () => {
                         collection(db, pointCollectionPath), 
                         where('timestamp', '>=', startOfDay),
                         where('timestamp', '<=', endOfDay),
-                        orderBy('timestamp', 'desc')
+                        orderBy('timestamp', 'desc') // Mantém a ordem DESC para exibir
                     );
                     
                     const pontosSnapshot = await getDocs(qPontos);
@@ -1346,6 +1412,42 @@ const GestorDashboard = () => {
 
         fetchPontosPorData();
     }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
+
+    // --- NOVA FUNÇÃO: Salvar a hora do ponto editada ---
+    const handleUpdatePointTime = async (newTime) => {
+        if (!editingPoint) return;
+        
+        const [hours, minutes] = newTime.split(':').map(Number);
+        
+        // Pega a data original (do dia selecionado) e aplica a nova hora/minuto
+        const originalTimestamp = editingPoint.timestamp.toDate();
+        const newDate = new Date(originalTimestamp);
+        newDate.setHours(hours);
+        newDate.setMinutes(minutes);
+
+        const pointDocRef = doc(db, `artifacts/${appId}/users/${editingPoint.servidorId}/registros_ponto`, editingPoint.id);
+
+        try {
+            await updateDoc(pointDocRef, {
+                timestamp: newDate
+            });
+
+            // Atualiza o state local para refletir a mudança imediatamente
+            setPontosDosServidores(prevMap => ({
+                ...prevMap,
+                [editingPoint.servidorId]: prevMap[editingPoint.servidorId].map(p =>
+                    p.id === editingPoint.id ? { ...p, timestamp: Timestamp.fromDate(newDate) } : p
+                ).sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate()) // Re-ordena DESC
+            }));
+
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Registro de ponto atualizado.' });
+            setEditingPoint(null);
+        } catch (error) {
+            console.error("Erro ao atualizar ponto:", error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar a alteração: ${error.message}` });
+        }
+    };
+    // --- FIM DA NOVA FUNÇÃO ---
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -1652,11 +1754,13 @@ const GestorDashboard = () => {
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
+                                                            {/* --- NOVA COLUNA DE AÇÕES --- */}
+                                                            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Ações</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
                                                         {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
-                                                            [...pontosDosServidores[servidor.id]].reverse().map(ponto => (
+                                                            pontosDosServidores[servidor.id].map(ponto => (
                                                                 <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                                                     <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
                                                                     <td className="px-4 py-3 text-sm">
@@ -1665,11 +1769,21 @@ const GestorDashboard = () => {
                                                                         </span>
                                                                     </td>
                                                                     <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
+                                                                    {/* --- NOVO BOTÃO DE EDITAR --- */}
+                                                                    <td className="px-4 py-3 text-right">
+                                                                        <button 
+                                                                            onClick={() => setEditingPoint({ ...ponto, servidorId: servidor.id, servidorNome: servidor.nome })}
+                                                                            className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
+                                                                            title="Ajustar horário"
+                                                                        >
+                                                                            <Edit3 className="w-4 h-4" />
+                                                                        </button>
+                                                                    </td>
                                                                 </tr>
                                                             ))
                                                         ) : (
                                                             <tr>
-                                                                <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                                                <td colSpan="4" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                                                     Nenhum registro de ponto para esta data.
                                                                 </td>
                                                             </tr>
@@ -1704,12 +1818,19 @@ const GestorDashboard = () => {
                     onClose={() => setViewingMessageReads(null)}
                     message={viewingMessageReads}
                 />
+                {/* --- NOVO: Renderiza o modal de edição de ponto --- */}
+                <EditPointModal
+                    isOpen={!!editingPoint}
+                    onClose={() => setEditingPoint(null)}
+                    point={editingPoint}
+                    onSave={handleUpdatePointTime}
+                />
             </div>
         </div>
     );
 };
 
-// --- *** ATUALIZADO *** UserManagement ---
+// --- *** ATUALIZADO *** UserManagement (Correção Vercel) ---
 const UserManagement = () => {
     const { db, unidades, allUsers } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1723,7 +1844,8 @@ const UserManagement = () => {
 
     // --- CORREÇÃO VERCEL: 'setAllUsers' removido ---
     useEffect(() => {
-        // Apenas define loading como 'false' quando 'allUsers' (do contexto) for carregado.
+        // Apenas define loading como 'false' quando 'allUsers' (do contexto) for carregado
+        // ou se o firebase não estiver inicializado (modo demo)
         if (allUsers.length > 0 || !isFirebaseInitialized) {
             setLoading(false);
         }
@@ -2241,4 +2363,3 @@ export default function App() {
         </ThemeProvider>
     );
 }
-
