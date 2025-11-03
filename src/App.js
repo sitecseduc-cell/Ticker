@@ -566,9 +566,10 @@ const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
     );
 };
 
-// --- NOVO COMPONENTE: Modal de Edição de Ponto ---
+// --- NOVO COMPONENTE: Modal de Edição de Ponto (COM OBSERVAÇÃO) ---
 const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
     const [newTime, setNewTime] = useState('');
+    const [observacao, setObservacao] = useState(''); // <-- NOVO ESTADO
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -578,6 +579,9 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
             const hours = String(d.getHours()).padStart(2, '0');
             const minutes = String(d.getMinutes()).padStart(2, '0');
             setNewTime(`${hours}:${minutes}`);
+            
+            // Define a observação existente (se houver)
+            setObservacao(point.observacao || ''); // <-- ADICIONADO
         }
     }, [point]);
 
@@ -586,7 +590,8 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
     const handleSave = async (e) => {
         e.preventDefault();
         setLoading(true);
-        await onSave(newTime);
+        // Passa a observação para a função de salvar
+        await onSave(newTime, observacao); // <-- MODIFICADO
         setLoading(false);
     };
 
@@ -594,7 +599,7 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
             <form onSubmit={handleSave} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Ajustar Registro de Ponto</h3>
-                <div className="mt-4 space-y-2">
+                <div className="mt-4 space-y-3">
                     <p className="text-sm text-slate-600 dark:text-slate-300">
                         Servidor: <span className="font-semibold">{point.servidorNome}</span>
                     </p>
@@ -617,6 +622,21 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
                             className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
                         />
                     </div>
+                    {/* --- CAMPO DE OBSERVAÇÃO ADICIONADO --- */}
+                    <div className="pt-2">
+                        <label htmlFor="observacao-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Observação (Opcional):
+                        </label>
+                        <textarea
+                            id="observacao-input"
+                            value={observacao}
+                            onChange={(e) => setObservacao(e.target.value)}
+                            rows="3"
+                            placeholder="Ex: Ajuste solicitado pelo servidor..."
+                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                    {/* --- FIM DO CAMPO ADICIONADO --- */}
                 </div>
                 <div className="flex justify-end space-x-3 mt-6">
                     <button type="button" onClick={onClose} className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 dark:bg-gray-700 dark:text-slate-200 dark:hover:bg-gray-600 transition">
@@ -1413,8 +1433,8 @@ const GestorDashboard = () => {
         fetchPontosPorData();
     }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
 
-    // --- NOVA FUNÇÃO: Salvar a hora do ponto editada ---
-    const handleUpdatePointTime = async (newTime) => {
+    // --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
+    const handleUpdatePointTime = async (newTime, observacao) => { // <-- MODIFICADO
         if (!editingPoint) return;
         
         const [hours, minutes] = newTime.split(':').map(Number);
@@ -1429,14 +1449,15 @@ const GestorDashboard = () => {
 
         try {
             await updateDoc(pointDocRef, {
-                timestamp: newDate
+                timestamp: newDate,
+                observacao: observacao || null // <-- ADICIONADO: Salva a observação
             });
 
             // Atualiza o state local para refletir a mudança imediatamente
             setPontosDosServidores(prevMap => ({
                 ...prevMap,
                 [editingPoint.servidorId]: prevMap[editingPoint.servidorId].map(p =>
-                    p.id === editingPoint.id ? { ...p, timestamp: Timestamp.fromDate(newDate) } : p
+                    p.id === editingPoint.id ? { ...p, timestamp: Timestamp.fromDate(newDate), observacao: observacao || null } : p // <-- MODIFICADO
                 ).sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate()) // Re-ordena DESC
             }));
 
@@ -1447,7 +1468,7 @@ const GestorDashboard = () => {
             setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar a alteração: ${error.message}` });
         }
     };
-    // --- FIM DA NOVA FUNÇÃO ---
+    // --- FIM DA FUNÇÃO ATUALIZADA ---
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -1662,12 +1683,11 @@ const GestorDashboard = () => {
                                                             {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
                                                         </button>
                                                     </div>
-                                                ) : (
                                                     <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
                                                 )}
                                             </td>
                                         </tr>
-                                    ))}
+                                        ))    
                                     {solicitacoes.length === 0 && <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
                                 </tbody>
                             </table>
@@ -1753,6 +1773,7 @@ const GestorDashboard = () => {
                                                         <tr>
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Observação</th> {/* <-- ADICIONADO */}
                                                             <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
                                                             {/* --- NOVA COLUNA DE AÇÕES --- */}
                                                             <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Ações</th>
@@ -1769,7 +1790,11 @@ const GestorDashboard = () => {
                                                                         </span>
                                                                     </td>
                                                                     <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
-                                                                    {/* --- NOVO BOTÃO DE EDITAR --- */}
+                                                                    {/* --- COLUNA DE OBSERVAÇÃO ADICIONADA --- */}
+                                                                    <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400" title={ponto.observacao}>
+                                                                        {ponto.observacao ? (ponto.observacao.length > 20 ? ponto.observacao.substring(0, 20) + '...' : ponto.observacao) : '---'}
+                                                                    </td>
+                                                                    {/* --- FIM DA COLUNA ADICIONADA --- */}
                                                                     <td className="px-4 py-3 text-right">
                                                                         <button 
                                                                             onClick={() => setEditingPoint({ ...ponto, servidorId: servidor.id, servidorNome: servidor.nome })}
@@ -1783,7 +1808,8 @@ const GestorDashboard = () => {
                                                             ))
                                                         ) : (
                                                             <tr>
-                                                                <td colSpan="4" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
+                                                                {/* Atualiza o colSpan para 5 por causa da nova coluna */}
+                                                                <td colSpan="5" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
                                                                     Nenhum registro de ponto para esta data.
                                                                 </td>
                                                             </tr>
