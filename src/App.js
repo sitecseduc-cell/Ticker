@@ -522,13 +522,20 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, role, onDelete, 
 
 // Modal para exibir *quem* leu a mensagem
 const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
-    if (!isOpen || !message) return null;
-
+    
+    // --- CORREÇÃO INÍCIO ---
+    // O Hook 'useMemo' foi movido para o TOPO do componente.
     const readers = useMemo(() => {
-        if (!message.readBy) return [];
+        // A verificação de 'message' agora é feita aqui dentro
+        if (!message || !message.readBy) return [];
+        
         // Transforma o map 'readBy' em um array e ordena por nome
         return Object.values(message.readBy).sort((a, b) => a.nome.localeCompare(b.nome));
     }, [message]);
+
+    // O retorno condicional (if) agora vem DEPOIS dos Hooks.
+    if (!isOpen || !message) return null;
+    // --- CORREÇÃO FIM ---
 
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
