@@ -223,14 +223,14 @@ const AuthProvider = ({ children }) => {
                 createdAt: new Date(),
             });
 
-        } catch (error) {
-            console.error("Firebase sign-up failed:", error);
-            if (error.code === 'auth/email-already-in-use') {
-                throw new Error("Este email já está em uso.");
-            }
-            throw new Error(error.message || "Falha ao criar a conta.");
-        }
-    }, []);
+       // } catch (error) {
+          //  console.error("Firebase sign-up failed:", error);
+          //  if (error.code === 'auth/email-already-in-use') {
+           //     throw new Error("Este email já está em uso.");
+          //  }
+        //    throw new Error(error.message || "Falha ao criar a conta.");
+      //  }
+   // }, []);
 
     const handleLogin = useCallback(async (email, password) => {
         if (!isFirebaseInitialized) {
