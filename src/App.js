@@ -229,8 +229,8 @@ const AuthProvider = ({ children }) => {
            //     throw new Error("Este email já está em uso.");
           //  }
         //    throw new Error(error.message || "Falha ao criar a conta.");
-      //  }
-   // }, []);
+      //  } //
+   }, []);
 
     const handleLogin = useCallback(async (email, password) => {
         if (!isFirebaseInitialized) {
