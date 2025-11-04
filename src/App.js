@@ -182,7 +182,7 @@ const AuthProvider = ({ children }) => {
                         const usersSnapshot = await getDocs(qUsers);
                         setAllUsers(usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
                     }
-                    
+
                 } else {
                     console.error("Usuário autenticado não encontrado no Firestore. Fazendo logout.");
                     await signOut(auth);
@@ -393,7 +393,7 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Visualizar Anexo</h3>
                 <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 break-all">Arquivo: {fileName || 'Arquivo'}</p>
-                
+
                 <div className="mt-4 p-4 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 min-h-[200px] flex items-center justify-center">
                     {isImage ? (
                         <img 
@@ -419,7 +419,7 @@ const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
                         </div>
                     )}
                 </div>
-                
+
                 <button onClick={onClose} className="mt-6 w-full py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition">Fechar</button>
             </div>
         </div>
@@ -490,13 +490,13 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, role, onDelete, 
                             return (
                                 <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
                                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                                        Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole === 'rh' ? 'Suporte' : msg.senderRole})</span>
+                                        Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
                                     </p>
                                     <p className="text-sm text-slate-500 dark:text-slate-400">
                                         Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
                                     </p>
                                     <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
-                                    
+
                                     {/* Ações do Admin/Gestor */}
                                     {canManage && (
                                         <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
@@ -531,13 +531,13 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, role, onDelete, 
 
 // Modal para exibir *quem* leu a mensagem
 const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
-    
+
     // --- CORREÇÃO INÍCIO ---
     // O Hook 'useMemo' foi movido para o TOPO do componente.
     const readers = useMemo(() => {
         // A verificação de 'message' agora é feita aqui dentro
         if (!message || !message.readBy) return [];
-        
+
         // Transforma o map 'readBy' em um array e ordena por nome
         return Object.values(message.readBy).sort((a, b) => a.nome.localeCompare(b.nome));
     }, [message]);
@@ -595,7 +595,7 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
             const hours = String(d.getHours()).padStart(2, '0');
             const minutes = String(d.getMinutes()).padStart(2, '0');
             setNewTime(`${hours}:${minutes}`);
-            
+
             // Define a observação existente (se houver)
             setObservacao(point.observacao || ''); // <-- ADICIONADO
         }
@@ -672,21 +672,21 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-    
+
     // --- CORREÇÃO VERCEL: Lê o localStorage *antes* dos hooks ---
     const initialRememberMe = localStorage.getItem('rememberMePreference') === 'true';
     const initialEmail = initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : '';
-    
+
     const [rememberMe, setRememberMe] = useState(initialRememberMe);
     const [email, setEmail] = useState(initialEmail);
     // --- FIM DA CORREÇÃO ---
-    
+
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const onLogin = async (e) => {
         e.preventDefault();
-        
+
         if (rememberMe) {
             localStorage.setItem('rememberedEmail', email);
             localStorage.setItem('rememberMePreference', 'true');
@@ -723,7 +723,7 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
             <form onSubmit={onLogin} className="space-y-4">
                  <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-                 
+
                  <div className="flex items-center space-x-2">
                     <input
                         type="checkbox"
@@ -896,7 +896,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 const file = formData.anexoFile;
                 anexoNome = file.name;
                 const storageRef = ref(storage, `anexos/${user.uid}/${Date.now()}_${anexoNome}`);
-                
+
                 const snapshot = await uploadBytes(storageRef, file);
                 anexoUrl = await getDownloadURL(snapshot.ref);
             }
@@ -985,7 +985,7 @@ const ServidorDashboard = () => {
     const [solicitacoes, setSolicitacoes] = useState([]);
 
     const [viewDate, setViewDate] = useState(getTodayISOString());
-    
+
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${userId}`) || 0; // Chave por usuário
@@ -997,7 +997,7 @@ const ServidorDashboard = () => {
     // Este useEffect busca TODOS os pontos
     useEffect(() => {
         if (!isFirebaseInitialized || !userId) return;
-        
+
         const qPoints = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc'));
         const unsubPoints = onSnapshot(qPoints, (snapshot) => {
             const fetchedPoints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1079,7 +1079,7 @@ const ServidorDashboard = () => {
         const dateObj = new Date(viewDate);
         dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
         const dateKey = formatDateOnly(dateObj);
-        
+
         const day = dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
 
         // Recalcula o saldo do dia selecionado (especialmente para 'hoje' em andamento)
@@ -1100,14 +1100,14 @@ const ServidorDashboard = () => {
         if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
             totalWorkedMs += (new Date().getTime() - currentSegmentStart);
         }
-        
+
         day.totalMs = totalWorkedMs;
 
         // --- INÍCIO DA CORREÇÃO ---
 
         // Esta linha estava faltando no seu código e causou o erro:
         const lastPointOfDay = day.points[day.points.length - 1]; 
-        
+
         // Esta é a sua nova lógica de 4/8 horas:
         const userTargetMs = getTargetHoursMs(user.role); 
 
@@ -1179,7 +1179,7 @@ const ServidorDashboard = () => {
         finished: { label: 'Expediente Finalizado', icon: CheckCircle, color: 'bg-slate-400' },
     };
     const currentButton = buttonMap[nextPointType];
-    
+
     // Saldo do dia selecionado (para o card principal)
     const selectedDayBalanceMs = selectedDayData.balanceMs;
     // Saldo total (para o texto pequeno)
@@ -1203,7 +1203,7 @@ const ServidorDashboard = () => {
                     </div>
                     <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
-                        
+
                         <button
                             onClick={openNotificationList}
                             className="relative p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -1363,7 +1363,7 @@ const GestorDashboard = () => {
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
-    
+
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
     const [selectedDate, setSelectedDate] = useState(getTodayISOString());
@@ -1372,9 +1372,9 @@ const GestorDashboard = () => {
     const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
     const [unreadCount, setUnreadCount] = useState(0);
     const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
-    
+
     const [viewingMessageReads, setViewingMessageReads] = useState(null);
-    
+
     // --- NOVO: State para o modal de edição de ponto ---
     const [editingPoint, setEditingPoint] = useState(null); // { ponto, servidorId, servidorNome }
 
@@ -1383,7 +1383,7 @@ const GestorDashboard = () => {
 
     useEffect(() => {
         if (!isFirebaseInitialized) return;
-        
+
         const q = query(
             collection(db, solicitacoesCollectionPath),
             orderBy('createdAt', 'desc')
@@ -1409,7 +1409,7 @@ const GestorDashboard = () => {
             setLoadingRegistros(false);
             return;
         }
-        
+
         setServidoresDaUnidade(allUsers.filter(u => u.role === 'servidor'));
 
     }, [allUsers]);
@@ -1432,14 +1432,14 @@ const GestorDashboard = () => {
                 const pontosMap = {};
                 for (const servidor of servidoresDaUnidade) {
                     const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
-                    
+
                     const qPontos = query(
                         collection(db, pointCollectionPath), 
                         where('timestamp', '>=', startOfDay),
                         where('timestamp', '<=', endOfDay),
                         orderBy('timestamp', 'desc') // Mantém a ordem DESC para exibir
                     );
-                    
+
                     const pontosSnapshot = await getDocs(qPontos);
                     pontosMap[servidor.id] = pontosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 }
@@ -1463,9 +1463,9 @@ const GestorDashboard = () => {
 // --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
     const handleUpdatePointTime = async (newTime, observacao) => { // <-- MODIFICADO
         if (!editingPoint) return;
-        
+
         const [hours, minutes] = newTime.split(':').map(Number);
-        
+
         // Pega a data original (do dia selecionado) e aplica a nova hora/minuto
         const originalTimestamp = editingPoint.timestamp.toDate();
         const newDate = new Date(originalTimestamp);
@@ -1532,14 +1532,14 @@ const GestorDashboard = () => {
 
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
-        
+
         if (filteredServidores.length === 0) {
              setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
              return;
         }
-        
+
         const doc = new jsPDF();
-        
+
         let titulo = 'Relatório de Pontos';
         if (selectedUnidadeId !== 'all' && selectedUnidadeId !== 'null') {
             titulo = `Unidade: ${unidades[selectedUnidadeId]?.name}`;
@@ -1597,7 +1597,7 @@ const GestorDashboard = () => {
              return url.substring(url.lastIndexOf('/') + 1);
          }
     };
-    
+
     const openNotificationList = () => {
         setIsNotificationListOpen(true);
         if (globalMessages.length > 0) {
@@ -1605,10 +1605,10 @@ const GestorDashboard = () => {
         }
         setUnreadCount(0);
     };
-    
+
     const handleDeleteMessage = async (messageId) => {
         if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
-        
+
         try {
             const msgRef = doc(db, `artifacts/${appId}/public/data/global_messages`, messageId);
             await deleteDoc(msgRef);
@@ -1855,7 +1855,7 @@ const GestorDashboard = () => {
                         )}
                     </section>
                 )}
-                
+
                 {activeTab === 'messages' && (
                     <GlobalMessagesManager role="gestor" />
                 )}
@@ -1951,7 +1951,7 @@ const UserManagement = () => {
     };
 
     const filteredUsers = allUsers.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
-    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'Suporte' }; // <-- Alterado de 'RH/Admin' para 'Suporte'
+    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
@@ -2018,11 +2018,10 @@ const UserManagement = () => {
                             <div>
                                 <label className="text-sm font-medium dark:text-slate-300">Perfil</label>
                                 <select name="role" value={editingUser.role} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                                   <option value="servidor">Servidor</option>
-                                    <option value="estagiario">Estagiário</option>
+                                    <option value="servidor">Servidor</option>
+                                    <option value="estagiario">Estagiário</option> {/* <-- ADICIONADO */}
                                     <option value="gestor">Gestor</option>
-                                    {/* 2. MUDE A OPÇÃO AQUI */}
-                                    <option value="rh">Suporte</option> {/* <-- Alterado de 'RH/Admin' para 'Suporte' */}
+                                    <option value="rh">RH/Admin</option>
                                 </select>
                             </div>
                             <div>
@@ -2196,7 +2195,7 @@ const GlobalMessagesManager = ({ role }) => {
 
     const handleDeleteMessage = async (messageId) => {
         if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
-        
+
         try {
             const msgRef = doc(db, messagesCollectionPath, messageId);
             await deleteDoc(msgRef);
@@ -2231,13 +2230,13 @@ const GlobalMessagesManager = ({ role }) => {
                                 return (
                                     <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
                                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                                            Enviada por: <span className="font-medium">{message.senderName} ({message.senderRole === 'rh' ? 'Suporte' : message.senderRole})</span>
+                                            Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
                                         </p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">
                                             Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
                                         </p>
                                         <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
-                                        
+
                                         <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
                                             <button 
                                                 onClick={() => setViewingMessageReads(msg)}
@@ -2273,16 +2272,14 @@ const GlobalMessagesManager = ({ role }) => {
 const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
-    // 1. MUDE AQUI
-    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'Suporte' }; // <-- Alterado de 'RH/Admin' para 'Suporte'
+    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
         <div className="p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
                  <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        {/* 2. MUDE O TÍTULO AQUI */}
-                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-600" /> Painel de Suporte</h1> {/* <-- Alterado de 'Administração (RH)' para 'Suporte' */}
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-600" /> Painel de Administração (RH)</h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-1">Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Perfil: {roleMap[user.role]}.</p>
                     </div>
                      <div className="flex items-center space-x-3 self-end sm:self-center">
@@ -2320,7 +2317,7 @@ const Footer = () => {
 const AppContent = () => {
     const { user, role, isLoading, globalMessages, db } = useAuthContext();
     const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
-    
+
     const [newestMessage, setNewestMessage] = useState(null);
     const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
 
@@ -2332,18 +2329,18 @@ const AppContent = () => {
 
         const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
         const newestMsg = globalMessages[0];
-        
+
         if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
             const alreadyRead = newestMsg.readBy && newestMsg.readBy[user.uid];
-            
+
             if (!alreadyRead) {
                 setNewestMessage(newestMsg);
                 setIsNewMessageModalOpen(true);
             }
         }
-        
+
     }, [globalMessages, user]);
-    
+
     // Marca a mensagem como ciente no Firestore
     const handleAcknowledgeMessage = async (messageId) => {
         if (!messageId || !user) return;
@@ -2400,7 +2397,7 @@ const AppContent = () => {
                 ) : (
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
-                
+
                 <NewMessageModal 
                     isOpen={isNewMessageModalOpen}
                     onClose={() => setIsNewMessageModalOpen(false)} // Fechar sem marcar como lido (pelo 'X')
