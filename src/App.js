@@ -1055,14 +1055,17 @@ const ServidorDashboard = () => {
             }
 
             day.totalMs = totalWorkedMs;
+
+            // --- INÍCIO DA CORREÇÃO ---
             const lastPointOfDay = day.points[day.points.length - 1];
-            const userTargetMs = getTargetHoursMs(user.role); // <-- ADICIONADO
-    
-                if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- MODIFICADO
-                } else {
+            const userTargetMs = getTargetHoursMs(user.role); // <-- SUA LÓGICA DE 4/8 HORAS
+
+            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- USANDO A META CORRETA
+            } else {
                  day.balanceMs = 0; // Não conta saldo para dias não finalizados
-        }
+            }
+            // --- FIM DA CORREÇÃO ---
 
             // Apenas adiciona ao saldo total se o dia foi finalizado
             if (day.balanceMs !== 0) {
@@ -1070,7 +1073,7 @@ const ServidorDashboard = () => {
             }
         });
         return { summary, totalBalanceMs };
-    }, [points]);
+    }, [points, user.role]); // <-- ADICIONADO user.role
 
     const selectedDayData = useMemo(() => {
         const dateObj = new Date(viewDate);
@@ -1100,23 +1103,28 @@ const ServidorDashboard = () => {
         
         day.totalMs = totalWorkedMs;
 
-        // Calcula o saldo do dia (mesmo que não finalizado)
-        const userTargetMs = getTargetHoursMs(user.role); // <-- ADICIONADO
+        // --- INÍCIO DA CORREÇÃO ---
+
+        // Esta linha estava faltando no seu código e causou o erro:
+        const lastPointOfDay = day.points[day.points.length - 1]; 
+        
+        // Esta é a sua nova lógica de 4/8 horas:
+        const userTargetMs = getTargetHoursMs(user.role); 
 
         if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-        day.balanceMs = totalWorkedMs - userTargetMs; // <-- MODIFICADO
+            day.balanceMs = totalWorkedMs - userTargetMs;
         } else if (dateKey === formatDateOnly(new Date())) {
-            // Se for hoje e não estiver finalizado, o saldo é 0 (ou o total trabalhado - meta, se preferir)
-            // Vamos manter como 0 para não confundir com horas extras
+            // Se for hoje e não estiver finalizado, o saldo é 0
             day.balanceMs = 0; 
         } else {
-        // Se for um dia passado não finalizado, o saldo é negativo    
-        day.balanceMs = totalWorkedMs - userTargetMs; // <-- MODIFICADO
-        }    
+            // Se for um dia passado não finalizado, o saldo é negativo
+            day.balanceMs = totalWorkedMs - userTargetMs;
+        }
+        // --- FIM DA CORREÇÃO ---
 
 
         return day;
-    }, [dailySummary.summary, viewDate]);
+        }, [dailySummary.summary, viewDate, user.role]); // <-- ADICIONADO user.role
 
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
