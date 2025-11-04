@@ -490,7 +490,7 @@ const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, role, onDelete, 
                             return (
                                 <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
                                     <p className="text-sm text-slate-500 dark:text-slate-400">
-                                        Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
+                                        Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole === 'rh' ? 'Suporte' : msg.senderRole})</span>
                                     </p>
                                     <p className="text-sm text-slate-500 dark:text-slate-400">
                                         Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
@@ -1951,7 +1951,7 @@ const UserManagement = () => {
     };
 
     const filteredUsers = allUsers.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
-    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'Suporte' }; // <-- Alterado de 'RH/Admin' para 'Suporte'
 
     return (
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
@@ -2018,10 +2018,11 @@ const UserManagement = () => {
                             <div>
                                 <label className="text-sm font-medium dark:text-slate-300">Perfil</label>
                                 <select name="role" value={editingUser.role} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                                    <option value="servidor">Servidor</option>
-                                    <option value="estagiario">Estagiário</option> {/* <-- ADICIONADO */}
+                                   <option value="servidor">Servidor</option>
+                                    <option value="estagiario">Estagiário</option>
                                     <option value="gestor">Gestor</option>
-                                    <option value="rh">RH/Admin</option>
+                                    {/* 2. MUDE A OPÇÃO AQUI */}
+                                    <option value="rh">Suporte</option> {/* <-- Alterado de 'RH/Admin' para 'Suporte' */}
                                 </select>
                             </div>
                             <div>
@@ -2230,7 +2231,7 @@ const GlobalMessagesManager = ({ role }) => {
                                 return (
                                     <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
                                         <p className="text-sm text-slate-500 dark:text-slate-400">
-                                            Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
+                                            Enviada por: <span className="font-medium">{message.senderName} ({message.senderRole === 'rh' ? 'Suporte' : message.senderRole})</span>
                                         </p>
                                         <p className="text-sm text-slate-500 dark:text-slate-400">
                                             Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
@@ -2272,14 +2273,16 @@ const GlobalMessagesManager = ({ role }) => {
 const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
-    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    // 1. MUDE AQUI
+    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'Suporte' }; // <-- Alterado de 'RH/Admin' para 'Suporte'
 
     return (
         <div className="p-4 md:p-8">
             <div className="max-w-6xl mx-auto">
                  <header className="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                     <div>
-                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-600" /> Painel de Administração (RH)</h1>
+                        {/* 2. MUDE O TÍTULO AQUI */}
+                        <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100"><Briefcase className="inline w-8 h-8 mr-2 text-blue-600" /> Painel de Suporte</h1> {/* <-- Alterado de 'Administração (RH)' para 'Suporte' */}
                         <p className="text-slate-500 dark:text-slate-400 mt-1">Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Perfil: {roleMap[user.role]}.</p>
                     </div>
                      <div className="flex items-center space-x-3 self-end sm:self-center">
