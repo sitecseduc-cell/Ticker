@@ -201,14 +201,14 @@ const AuthProvider = ({ children }) => {
             throw new Error('O cadastro não está disponível no modo de demonstração.');
         }
 
-        try {
-            const usersRef = collection(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION);
-            const q = query(usersRef, where("matricula", "==", matricula));
-            const querySnapshot = await getDocs(q);
+        //try {
+           // const usersRef = collection(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION);
+            //const q = query(usersRef, where("matricula", "==", matricula));
+            //const querySnapshot = await getDocs(q);
 
-            if (!querySnapshot.empty) {
-                throw new Error("Esta matrícula já está em uso.");
-            }
+            //if (!querySnapshot.empty) {
+               // throw new Error("Esta matrícula já está em uso.");
+            //}
 
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
