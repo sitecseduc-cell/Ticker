@@ -2374,6 +2374,7 @@ const AppContent = () => {
 
     const dashboardMap = {
         servidor: <ServidorDashboard />,
+        estagiario: <ServidorDashboard />, // <-- ADICIONE ESTA LINHA
         gestor: <GestorDashboard />,
         rh: <RHAdminDashboard />
     };
