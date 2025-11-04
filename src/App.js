@@ -59,6 +59,15 @@ const STATUS_COLORS = {
     reprovado: 'text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800',
 };
 const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
+const TARGET_INTERN_DAILY_HOURS_MS = 4 * 60 * 60 * 1000; // <-- ADICIONADO
+
+// --- Helper: Retorna a meta de horas com base na função ---
+const getTargetHoursMs = (role) => {
+    if (role === 'estagiario') {
+        return TARGET_INTERN_DAILY_HOURS_MS;
+    }
+    return TARGET_DAILY_HOURS_MS;
+};
 const USER_COLLECTION = 'users';
 const UNIT_COLLECTION = 'unidades';
 
@@ -1047,11 +1056,13 @@ const ServidorDashboard = () => {
 
             day.totalMs = totalWorkedMs;
             const lastPointOfDay = day.points[day.points.length - 1];
-            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                 day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
-            } else {
+            const userTargetMs = getTargetHoursMs(user.role); // <-- ADICIONADO
+    
+                if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- MODIFICADO
+                } else {
                  day.balanceMs = 0; // Não conta saldo para dias não finalizados
-            }
+        }
 
             // Apenas adiciona ao saldo total se o dia foi finalizado
             if (day.balanceMs !== 0) {
@@ -1090,17 +1101,18 @@ const ServidorDashboard = () => {
         day.totalMs = totalWorkedMs;
 
         // Calcula o saldo do dia (mesmo que não finalizado)
-        const lastPointOfDay = day.points[day.points.length - 1];
+        const userTargetMs = getTargetHoursMs(user.role); // <-- ADICIONADO
+
         if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-            day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
+        day.balanceMs = totalWorkedMs - userTargetMs; // <-- MODIFICADO
         } else if (dateKey === formatDateOnly(new Date())) {
             // Se for hoje e não estiver finalizado, o saldo é 0 (ou o total trabalhado - meta, se preferir)
             // Vamos manter como 0 para não confundir com horas extras
             day.balanceMs = 0; 
         } else {
-            // Se for um dia passado não finalizado, o saldo é negativo
-            day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
-        }
+        // Se for um dia passado não finalizado, o saldo é negativo    
+        day.balanceMs = totalWorkedMs - userTargetMs; // <-- MODIFICADO
+        }    
 
 
         return day;
@@ -1931,7 +1943,7 @@ const UserManagement = () => {
     };
 
     const filteredUsers = allUsers.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
-    const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
@@ -1999,6 +2011,7 @@ const UserManagement = () => {
                                 <label className="text-sm font-medium dark:text-slate-300">Perfil</label>
                                 <select name="role" value={editingUser.role} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                                     <option value="servidor">Servidor</option>
+                                    <option value="estagiario">Estagiário</option> {/* <-- ADICIONADO */}
                                     <option value="gestor">Gestor</option>
                                     <option value="rh">RH/Admin</option>
                                 </select>
@@ -2251,7 +2264,7 @@ const GlobalMessagesManager = ({ role }) => {
 const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
-    const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
         <div className="p-4 md:p-8">
