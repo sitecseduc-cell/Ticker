@@ -4,14 +4,12 @@ import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit, Timestamp // <-- Timestamp importado
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit
 } from 'firebase/firestore';
-import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
-    Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell, Eye, BellRing, Edit3 // <-- Ícone de Edição adicionado
+    Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
@@ -26,7 +24,7 @@ const firebaseConfig = {
   appId: process.env.REACT_APP_appId
 };
 
-let app, auth, db, storage;
+let app, auth, db;
 let isFirebaseInitialized = false;
 let appId = 'secretaria-educacao-ponto-demo'; // Valor padrão
 
@@ -35,16 +33,15 @@ try {
         app = initializeApp(firebaseConfig);
         auth = getAuth(app);
         db = getFirestore(app);
-        storage = getStorage(app);
         isFirebaseInitialized = true;
-        appId = firebaseConfig.appId;
+        appId = firebaseConfig.appId; // Corrigido para usar appId
     } else {
         console.warn("Configuração do Firebase não encontrada. Usando modo de demonstração.");
-        app = {}; auth = {}; db = null; storage = null;
+        app = {}; auth = {}; db = null;
     }
 } catch (error) {
     console.error("Erro ao inicializar o Firebase:", error);
-    app = {}; auth = {}; db = null; storage = null;
+    app = {}; auth = {}; db = null;
 }
 
 // --- Constantes ---
@@ -59,24 +56,8 @@ const STATUS_COLORS = {
     reprovado: 'text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800',
 };
 const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
-const TARGET_INTERN_DAILY_HOURS_MS = 4 * 60 * 60 * 1000; // <-- ADICIONADO
-
-// --- Helper: Retorna a meta de horas com base na função ---
-const getTargetHoursMs = (role) => {
-    if (role === 'estagiario') {
-        return TARGET_INTERN_DAILY_HOURS_MS;
-    }
-    return TARGET_DAILY_HOURS_MS;
-};
 const USER_COLLECTION = 'users';
 const UNIT_COLLECTION = 'unidades';
-
-// --- Helper: Pega a data de hoje no formato YYYY-MM-DD ---
-const getTodayISOString = () => {
-    const today = new Date();
-    today.setMinutes(today.getMinutes() - today.getTimezoneOffset()); // Ajusta para o fuso horário local
-    return today.toISOString().split('T')[0];
-};
 
 // --- Contexts ---
 const ThemeContext = createContext();
@@ -122,8 +103,6 @@ const AuthProvider = ({ children }) => {
     const [user, setUser] = useState(null);
     const [isLoading, setIsLoading] = useState(true);
     const [unidades, setUnidades] = useState({});
-    const [globalMessages, setGlobalMessages] = useState([]);
-    const [allUsers, setAllUsers] = useState([]); 
 
     // Carregar unidades
     useEffect(() => {
@@ -143,24 +122,6 @@ const AuthProvider = ({ children }) => {
         return () => unsubscribe();
     }, []);
 
-    // Carregar mensagens globais
-    useEffect(() => {
-        if (!isFirebaseInitialized) return;
-
-        const messagesRef = collection(db, `artifacts/${appId}/public/data/global_messages`);
-        const q = query(messagesRef, orderBy('createdAt', 'desc'));
-
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const messages = snapshot.docs.map(doc => ({
-                id: doc.id,
-                ...doc.data()
-            }));
-            setGlobalMessages(messages);
-        });
-
-        return () => unsubscribe();
-    }, []);
-
     // Lógica de autenticação
     useEffect(() => {
         if (!isFirebaseInitialized) {
@@ -173,16 +134,7 @@ const AuthProvider = ({ children }) => {
                 const userDocRef = doc(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION, firebaseUser.uid);
                 const userSnap = await getDoc(userDocRef);
                 if (userSnap.exists()) {
-                    const userData = { uid: firebaseUser.uid, ...userSnap.data() };
-                    setUser(userData);
-
-                    if (userData.role === 'gestor' || userData.role === 'rh') {
-                        const usersRef = collection(db, `artifacts/${appId}/public/data/${USER_COLLECTION}`);
-                        const qUsers = query(usersRef);
-                        const usersSnapshot = await getDocs(qUsers);
-                        setAllUsers(usersSnapshot.docs.map(d => ({ id: d.id, ...d.data() })));
-                    }
-
+                    setUser({ uid: firebaseUser.uid, ...userSnap.data() });
                 } else {
                     console.error("Usuário autenticado não encontrado no Firestore. Fazendo logout.");
                     await signOut(auth);
@@ -201,14 +153,14 @@ const AuthProvider = ({ children }) => {
             throw new Error('O cadastro não está disponível no modo de demonstração.');
         }
 
-        //try {
-           // const usersRef = collection(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION);
-            //const q = query(usersRef, where("matricula", "==", matricula));
-            //const querySnapshot = await getDocs(q);
+        try {
+            const usersRef = collection(db, 'artifacts', appId, 'public', 'data', USER_COLLECTION);
+            const q = query(usersRef, where("matricula", "==", matricula));
+            const querySnapshot = await getDocs(q);
 
-            //if (!querySnapshot.empty) {
-               // throw new Error("Esta matrícula já está em uso.");
-            //}
+            if (!querySnapshot.empty) {
+                throw new Error("Esta matrícula já está em uso.");
+            }
 
             const userCredential = await createUserWithEmailAndPassword(auth, email, password);
             const user = userCredential.user;
@@ -223,24 +175,28 @@ const AuthProvider = ({ children }) => {
                 createdAt: new Date(),
             });
 
-       // } catch (error) {
-          //  console.error("Firebase sign-up failed:", error);
-          //  if (error.code === 'auth/email-already-in-use') {
-           //     throw new Error("Este email já está em uso.");
-          //  }
-        //    throw new Error(error.message || "Falha ao criar a conta.");
-      //  } //
-   }, []);
+        } catch (error) {
+            console.error("Firebase sign-up failed:", error);
+            if (error.code === 'auth/email-already-in-use') {
+                throw new Error("Este email já está em uso.");
+            }
+            throw new Error(error.message || "Falha ao criar a conta.");
+        }
+    }, []);
 
+    // ##### FUNÇÃO DE LOGIN MODIFICADA #####
     const handleLogin = useCallback(async (email, password) => {
         if (!isFirebaseInitialized) {
             throw new Error('Email ou senha incorretos.');
         }
 
         try {
+            // A autenticação agora é feita diretamente com o Firebase Auth
             await signInWithEmailAndPassword(auth, email, password);
+            // O onAuthStateChanged vai cuidar de buscar os dados do Firestore e atualizar o estado do usuário
         } catch(error) {
              console.error("Firebase login failed:", error);
+             // Mensagem de erro genérica para segurança
              throw new Error("Email ou senha incorretos.");
         }
     }, []);
@@ -271,16 +227,13 @@ const AuthProvider = ({ children }) => {
         userId: user?.uid || null,
         isLoading,
         unidades,
-        globalMessages,
-        allUsers,
         handleLogin,
         handleLogout,
         handleSignUp,
         handleForgotPassword,
         db,
-        auth,
-        storage 
-    }), [user, isLoading, unidades, globalMessages, allUsers, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
+        auth
+    }), [user, isLoading, unidades, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -385,319 +338,37 @@ const ConfirmationModal = ({ isOpen, title, message, onConfirm, onCancel, isLoad
 
 const FileViewerModal = ({ isOpen, onClose, fileUrl, fileName }) => {
     if (!isOpen) return null;
-
-    const isImage = fileUrl && /\.(jpe?g|png|gif|webp)$/i.test(fileName || fileUrl);
-
     return (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in" onClick={onClose}>
             <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg p-6 animate-in zoom-in-95" onClick={e => e.stopPropagation()}>
                 <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Visualizar Anexo</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1 break-all">Arquivo: {fileName || 'Arquivo'}</p>
-
-                <div className="mt-4 p-4 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 min-h-[200px] flex items-center justify-center">
-                    {isImage ? (
-                        <img 
-                            src={fileUrl} 
-                            alt={`Anexo ${fileName}`} 
-                            className="max-w-full max-h-[400px] rounded-md" 
-                            onError={(e) => { e.target.onerror = null; e.target.outerHTML = '<p class="text-red-500">Erro ao carregar imagem.</p>'; }}
-                        />
-                    ) : (
-                        <div className="text-center">
-                            <FileText className="w-16 h-16 text-slate-400 mx-auto" />
-                            <p className="font-semibold dark:text-slate-200 mt-2">Não é possível pré-visualizar este arquivo.</p>
-                            <p className="text-sm text-slate-600 dark:text-slate-300">Você pode baixá-lo para visualizar.</p>
-                            <a 
-                                href={fileUrl} 
-                                target="_blank" 
-                                rel="noopener noreferrer" 
-                                download={fileName}
-                                className="mt-4 inline-flex items-center justify-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition"
-                            >
-                                Baixar Arquivo
-                            </a>
-                        </div>
-                    )}
+                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Nome do arquivo: {fileName}</p>
+                <div className="mt-4 p-4 border rounded-lg text-center bg-slate-50 dark:bg-gray-800 dark:border-gray-700">
+                    <p className="font-semibold dark:text-slate-200">Visualização de anexo simulada.</p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">Em um ambiente de produção, o arquivo seria exibido aqui.</p>
+                    <a href={fileUrl} target="_blank" rel="noopener noreferrer" className="mt-4 inline-block text-blue-600 hover:underline text-xs break-all">
+                        URL simulada: {fileUrl}
+                    </a>
                 </div>
-
-                <button onClick={onClose} className="mt-6 w-full py-2 bg-slate-600 text-white rounded-lg hover:bg-slate-700 transition">Fechar</button>
+                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
             </div>
         </div>
     );
 };
 
-// Modal para exibir a *nova* mensagem global
-const NewMessageModal = ({ isOpen, onClose, message, onAcknowledge }) => {
-    const [loading, setLoading] = useState(false);
-
-    if (!isOpen || !message) return null;
-
-    const handleAcknowledge = async () => {
-        setLoading(true);
-        await onAcknowledge(message.id);
-        setLoading(false);
-        onClose();
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
-                <div className="flex items-center justify-between mb-4">
-                    <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100 flex items-center">
-                        <BellRing className="w-5 h-5 mr-2 text-blue-500" /> Nova Mensagem Global
-                    </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
-                </div>
-                <div className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg max-h-[50vh] overflow-y-auto">
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Enviada por: <span className="font-medium">{message.senderName} ({message.senderRole})</span>
-                    </p>
-                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                        Em: {formatDateOnly(message.createdAt)} às {formatTime(message.createdAt)}
-                    </p>
-                    <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{message.text}</p>
-                </div>
-                <button 
-                    onClick={handleAcknowledge} 
-                    disabled={loading}
-                    className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition flex items-center justify-center disabled:bg-blue-400"
-                >
-                    {loading ? <Loader2 className="w-5 h-5 animate-spin" /> : "Marcar como Ciente"}
-                </button>
-            </div>
-        </div>
-    );
-};
-
-// Modal para exibir *todas* as mensagens globais
-const GlobalMessagesViewerModal = ({ isOpen, onClose, messages, role, onDelete, onViewReads }) => {
-    if (!isOpen) return null;
-    const canManage = role === 'rh' || role === 'gestor';
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 h-[70vh] flex flex-col">
-                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Mensagens Globais</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
-                </div>
-                <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                    {messages.length === 0 ? (
-                        <p className="text-slate-500 dark:text-slate-400 text-center py-8">Nenhuma mensagem global encontrada.</p>
-                    ) : (
-                        messages.map(msg => {
-                            const readCount = msg.readBy ? Object.keys(msg.readBy).length : 0;
-                            return (
-                                <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                                        Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
-                                    </p>
-                                    <p className="text-sm text-slate-500 dark:text-slate-400">
-                                        Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
-                                    </p>
-                                    <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
-
-                                    {/* Ações do Admin/Gestor */}
-                                    {canManage && (
-                                        <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
-                                            <button 
-                                                onClick={() => onViewReads(msg)}
-                                                className="flex items-center text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                                            >
-                                                <Eye className="w-4 h-4 mr-1" />
-                                                Visualizado por {readCount}
-                                            </button>
-                                            <button 
-                                                onClick={() => onDelete(msg.id)}
-                                                className="flex items-center text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-1" />
-                                                Excluir
-                                            </button>
-                                        </div>
-                                    )}
-                                </div>
-                            )
-                        })
-                    )}
-                </div>
-                <div className="p-4 border-t dark:border-gray-800">
-                    <button onClick={onClose} className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// Modal para exibir *quem* leu a mensagem
-const MessageReadStatusModal = ({ isOpen, onClose, message }) => {
-
-    // --- CORREÇÃO INÍCIO ---
-    // O Hook 'useMemo' foi movido para o TOPO do componente.
-    const readers = useMemo(() => {
-        // A verificação de 'message' agora é feita aqui dentro
-        if (!message || !message.readBy) return [];
-
-        // Transforma o map 'readBy' em um array e ordena por nome
-        return Object.values(message.readBy).sort((a, b) => a.nome.localeCompare(b.nome));
-    }, [message]);
-
-    // O retorno condicional (if) agora vem DEPOIS dos Hooks.
-    if (!isOpen || !message) return null;
-    // --- CORREÇÃO FIM ---
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg animate-in zoom-in-95 h-[70vh] flex flex-col">
-                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Status de Leitura</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
-                </div>
-                <div className="p-4 bg-slate-100 dark:bg-gray-800 border-b dark:border-gray-700">
-                    <p className="text-sm font-medium text-slate-700 dark:text-slate-200 truncate">Mensagem: "{message.text}"</p>
-                </div>
-                <div className="p-6 space-y-4 overflow-y-auto flex-1">
-                    <h4 className="font-semibold text-slate-800 dark:text-slate-100">{readers.length} Servidores marcaram como ciente:</h4>
-                    {readers.length === 0 ? (
-                        <p className="text-slate-500 dark:text-slate-400 text-center py-8">Ninguém marcou esta mensagem como ciente ainda.</p>
-                    ) : (
-                        <ul className="divide-y dark:divide-gray-700">
-                            {readers.map(reader => (
-                                <li key={reader.matricula} className="py-2">
-                                    <p className="font-medium text-slate-700 dark:text-slate-200">{reader.nome} ({reader.matricula})</p>
-                                    <p className="text-xs text-slate-500 dark:text-slate-400">
-                                        {/* Adiciona verificação se readAt existe antes de formatar */}
-                                        Ciente em: {reader.readAt ? `${formatDateOnly(reader.readAt.toDate())} às ${formatTime(reader.readAt.toDate())}` : 'Data indisponível'}
-                                    </p>
-                                </li>
-                            ))}
-                        </ul>
-                    )}
-                </div>
-                <div className="p-4 border-t dark:border-gray-800">
-                    <button onClick={onClose} className="w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-// --- NOVO COMPONENTE: Modal de Edição de Ponto (COM OBSERVAÇÃO) ---
-const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
-    const [newTime, setNewTime] = useState('');
-    const [observacao, setObservacao] = useState(''); // <-- NOVO ESTADO
-    const [loading, setLoading] = useState(false);
-
-    useEffect(() => {
-        if (point && point.timestamp) {
-            // Formata o timestamp original para HH:MM
-            const d = point.timestamp.toDate();
-            const hours = String(d.getHours()).padStart(2, '0');
-            const minutes = String(d.getMinutes()).padStart(2, '0');
-            setNewTime(`${hours}:${minutes}`);
-
-            // Define a observação existente (se houver)
-            setObservacao(point.observacao || ''); // <-- ADICIONADO
-        }
-    }, [point]);
-
-    if (!isOpen || !point) return null;
-
-    const handleSave = async (e) => {
-        e.preventDefault();
-        setLoading(true);
-        // Passa a observação para a função de salvar
-        await onSave(newTime, observacao); // <-- MODIFICADO
-        setLoading(false);
-    };
-
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
-            <form onSubmit={handleSave} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
-                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Ajustar Registro de Ponto</h3>
-                <div className="mt-4 space-y-3">
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                        Servidor: <span className="font-semibold">{point.servidorNome}</span>
-                    </p>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                        Data: <span className="font-semibold">{formatDateOnly(point.timestamp)}</span>
-                    </p>
-                    <p className="text-sm text-slate-600 dark:text-slate-300">
-                        Tipo: <span className="font-semibold">{point.tipo.toUpperCase()}</span>
-                    </p>
-                    <div className="pt-2">
-                        <label htmlFor="time-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                            Novo Horário:
-                        </label>
-                        <input
-                            type="time"
-                            id="time-input"
-                            value={newTime}
-                            onChange={(e) => setNewTime(e.target.value)}
-                            required
-                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    {/* --- CAMPO DE OBSERVAÇÃO ADICIONADO --- */}
-                    <div className="pt-2">
-                        <label htmlFor="observacao-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
-                            Observação (Opcional):
-                        </label>
-                        <textarea
-                            id="observacao-input"
-                            value={observacao}
-                            onChange={(e) => setObservacao(e.target.value)}
-                            rows="3"
-                            placeholder="Ex: Ajuste solicitado pelo servidor..."
-                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                        />
-                    </div>
-                    {/* --- FIM DO CAMPO ADICIONADO --- */}
-                </div>
-                <div className="flex justify-end space-x-3 mt-6">
-                    <button type="button" onClick={onClose} className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 dark:bg-gray-700 dark:text-slate-200 dark:hover:bg-gray-600 transition">
-                        Cancelar
-                    </button>
-                    <button type="submit" disabled={loading} className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400 flex items-center">
-                        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-                        Salvar Ajuste
-                    </button>
-                </div>
-            </form>
-        </div>
-    );
-};
-
-
+// ##### TELA DE LOGIN MODIFICADA #####
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
-
-    // --- CORREÇÃO VERCEL: Lê o localStorage *antes* dos hooks ---
-    const initialRememberMe = localStorage.getItem('rememberMePreference') === 'true';
-    const initialEmail = initialRememberMe ? localStorage.getItem('rememberedEmail') || '' : '';
-
-    const [rememberMe, setRememberMe] = useState(initialRememberMe);
-    const [email, setEmail] = useState(initialEmail);
-    // --- FIM DA CORREÇÃO ---
-
+    const [email, setEmail] = useState(''); // Mudado de 'matricula' para 'email'
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
 
     const onLogin = async (e) => {
         e.preventDefault();
-
-        if (rememberMe) {
-            localStorage.setItem('rememberedEmail', email);
-            localStorage.setItem('rememberMePreference', 'true');
-        } else {
-            localStorage.removeItem('rememberedEmail');
-            localStorage.removeItem('rememberMePreference');
-        }
-
         setLoading(true);
         try {
-            await handleLogin(email, password);
+            await handleLogin(email, password); // Passando 'email' em vez de 'matricula'
         } catch (error) {
             setGlobalMessage({ type: 'error', title: 'Falha no Login', message: error.message });
         } finally {
@@ -721,25 +392,9 @@ const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
                 <p className="text-slate-500 dark:text-slate-400">Acesse sua conta para continuar.</p>
             </div>
             <form onSubmit={onLogin} className="space-y-4">
+                 {/* Campo de input alterado para 'email' */}
                  <input type="email" placeholder="Email" value={email} onChange={(e) => setEmail(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
                  <input type="password" placeholder="Senha" value={password} onChange={(e) => setPassword(e.target.value)} required className="w-full p-3 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition" />
-
-                 <div className="flex items-center space-x-2">
-                    <input
-                        type="checkbox"
-                        id="rememberMe"
-                        checked={rememberMe}
-                        onChange={(e) => setRememberMe(e.target.checked)}
-                        className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600"
-                    />
-                    <label 
-                        htmlFor="rememberMe" 
-                        className="text-sm text-slate-600 dark:text-slate-300"
-                    >
-                        Lembrar meu email
-                    </label>
-                 </div>
-
                  <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 disabled:bg-blue-400 flex justify-center items-center transition shadow-sm hover:shadow-md">
                     {loading ? <Loader2 className="w-6 h-6 animate-spin"/> : 'Entrar'}
                  </button>
@@ -767,7 +422,7 @@ const SignUpScreen = ({ onSwitchToLogin }) => {
         try {
             await handleSignUp(nome, email, matricula, password);
             setGlobalMessage({ type: 'success', title: 'Cadastro Realizado!', message: 'Sua conta foi criada com sucesso. Faça o login para continuar.' });
-            onSwitchToLogin();
+            onSwitchToLogin(); // Switch back to login screen on success
         } catch (error) {
             setGlobalMessage({ type: 'error', title: 'Falha no Cadastro', message: error.message });
         } finally {
@@ -855,7 +510,7 @@ const formatDateOnly = (timestamp) => {
     return date.toLocaleDateString('pt-BR', { year: 'numeric', month: '2-digit', day: '2-digit' });
 };
 const formatDuration = (ms) => {
-    if (ms === null || ms === undefined) return '00:00'; 
+    if (ms === 0) return '00:00';
     const sign = ms < 0 ? '-' : '+';
     const absMs = Math.abs(ms);
     const totalSeconds = Math.round(absMs / 1000);
@@ -865,11 +520,11 @@ const formatDuration = (ms) => {
 };
 
 const SolicitationModal = ({ isOpen, onClose }) => {
-    const { user, db, storage } = useAuthContext();
+    const { user, db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [formData, setFormData] = useState({
         tipo: 'abono',
-        dataOcorrencia: getTodayISOString(),
+        dataOcorrencia: new Date().toISOString().split('T')[0],
         justificativaTexto: '',
         anexoFile: null,
     });
@@ -891,14 +546,8 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 
         try {
             let anexoUrl = '';
-            let anexoNome = '';
             if (formData.anexoFile) {
-                const file = formData.anexoFile;
-                anexoNome = file.name;
-                const storageRef = ref(storage, `anexos/${user.uid}/${Date.now()}_${anexoNome}`);
-
-                const snapshot = await uploadBytes(storageRef, file);
-                anexoUrl = await getDownloadURL(snapshot.ref);
+                anexoUrl = `simulated://storage/${user.matricula}/${Date.now()}_${formData.anexoFile.name}`;
             }
 
             await addDoc(collection(db, solicitationCollectionPath), {
@@ -909,8 +558,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 tipo: formData.tipo,
                 dataOcorrencia: formData.dataOcorrencia,
                 justificativaTexto: formData.justificativaTexto,
-                anexoUrl: anexoUrl,
-                anexoNome: anexoNome,
+                anexoUrl,
                 status: 'pendente',
                 createdAt: new Date(),
             });
@@ -921,14 +569,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                 message: `Sua solicitação de ${formData.tipo} foi enviada com sucesso.`
             });
             onClose();
-            setFormData({
-                tipo: 'abono',
-                dataOcorrencia: getTodayISOString(),
-                justificativaTexto: '',
-                anexoFile: null,
-            });
         } catch (error) {
-            console.error("Erro ao enviar solicitação:", error);
             setGlobalMessage({ type: 'error', title: 'Erro de Submissão', message: `Falha ao enviar: ${error.message}` });
         } finally {
             setLoading(false);
@@ -975,29 +616,70 @@ const SolicitationModal = ({ isOpen, onClose }) => {
     );
 };
 
+// --- NOVO COMPONENTE: Modal de Confirmação de Ponto ---
+const PointConfirmationModal = ({ isOpen, onClose, onConfirm, type, timestamp, isLoading }) => {
+    if (!isOpen) return null;
+
+    const formattedTime = timestamp ? timestamp.toLocaleTimeString('pt-BR') : '';
+    const formattedDate = timestamp ? timestamp.toLocaleDateString('pt-BR') : '';
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-sm p-6 animate-in zoom-in-95 text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100 dark:bg-blue-900 mb-4">
+                    <Clock className="h-6 w-6 text-blue-600 dark:text-blue-400" />
+                </div>
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Confirmar Registro</h3>
+                <p className="text-slate-600 dark:text-slate-300 mt-2">
+                    Deseja registrar <strong>{type?.toUpperCase()}</strong>?
+                </p>
+                
+                <div className="my-4 p-3 bg-slate-50 dark:bg-gray-800 rounded-lg">
+                    <p className="text-3xl font-bold text-slate-800 dark:text-slate-100">{formattedTime}</p>
+                    <p className="text-sm text-slate-500 dark:text-slate-400">{formattedDate}</p>
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                    <button 
+                        onClick={onClose} 
+                        disabled={isLoading}
+                        className="flex-1 py-2.5 bg-slate-200 text-slate-700 rounded-lg hover:bg-slate-300 dark:bg-gray-700 dark:text-slate-200 dark:hover:bg-gray-600 transition font-medium disabled:opacity-50"
+                    >
+                        Cancelar
+                    </button>
+                    <button 
+                        onClick={onConfirm} 
+                        disabled={isLoading} 
+                        className="flex-1 py-2.5 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition font-medium flex items-center justify-center disabled:bg-blue-400"
+                    >
+                        {isLoading ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Confirmar'}
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
 const ServidorDashboard = () => {
-    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
+    const { user, userId, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
     const [clockInLoading, setClockInLoading] = useState(false);
+    // ... outros estados existentes ...
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
 
-    const [viewDate, setViewDate] = useState(getTodayISOString());
-
-    const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${userId}`) || 0; // Chave por usuário
+    // --- NOVOS ESTADOS PARA CONFIRMAÇÃO ---
+    const [isConfirmPointModalOpen, setIsConfirmPointModalOpen] = useState(false);
+    const [pendingPoint, setPendingPoint] = useState({ type: null, timestamp: null });
+    // --------------------------------------
 
     const pointCollectionPath = useMemo(() => `artifacts/${appId}/users/${userId}/registros_ponto`, [userId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
     const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
-    // Este useEffect busca TODOS os pontos
     useEffect(() => {
         if (!isFirebaseInitialized || !userId) return;
-
         const qPoints = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc'));
         const unsubPoints = onSnapshot(qPoints, (snapshot) => {
             const fetchedPoints = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
@@ -1013,16 +695,6 @@ const ServidorDashboard = () => {
         return () => { unsubPoints(); unsubSolicitations(); };
     }, [db, userId, pointCollectionPath, solicitacoesCollectionPath]);
 
-    // Calcula msgs não lidas
-    useEffect(() => {
-        if (globalMessages.length > 0) {
-            const newUnreadCount = globalMessages.filter(
-                msg => msg.createdAt.toDate().getTime() > lastReadTimestamp
-            ).length;
-            setUnreadCount(newUnreadCount);
-        }
-    }, [globalMessages, lastReadTimestamp]);
-
     const dailySummary = useMemo(() => {
         const summary = {};
         let totalBalanceMs = 0;
@@ -1033,8 +705,7 @@ const ServidorDashboard = () => {
             }
             summary[dateKey].points.push(point);
         });
-
-        Object.keys(summary).sort().forEach(dateKey => {
+        Object.keys(summary).forEach(dateKey => {
             const day = summary[dateKey];
             let totalWorkedMs = 0;
             let currentSegmentStart = null;
@@ -1048,83 +719,12 @@ const ServidorDashboard = () => {
                     currentSegmentStart = null;
                 }
             });
-
-            // Considera o dia atual como "em andamento" se não houver 'saida'
-            if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
-                totalWorkedMs += (new Date().getTime() - currentSegmentStart);
-            }
-
             day.totalMs = totalWorkedMs;
-
-            // --- INÍCIO DA CORREÇÃO ---
-            const lastPointOfDay = day.points[day.points.length - 1];
-            const userTargetMs = getTargetHoursMs(user.role); // <-- SUA LÓGICA DE 4/8 HORAS
-
-            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- USANDO A META CORRETA
-            } else {
-                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
-            }
-            // --- FIM DA CORREÇÃO ---
-
-            // Apenas adiciona ao saldo total se o dia foi finalizado
-            if (day.balanceMs !== 0) {
-                totalBalanceMs += day.balanceMs;
-            }
+            day.balanceMs = totalWorkedMs - TARGET_DAILY_HOURS_MS;
+            totalBalanceMs += day.balanceMs;
         });
         return { summary, totalBalanceMs };
-    }, [points, user.role]); // <-- ADICIONADO user.role
-
-    const selectedDayData = useMemo(() => {
-        const dateObj = new Date(viewDate);
-        dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
-        const dateKey = formatDateOnly(dateObj);
-
-        const day = dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
-
-        // Recalcula o saldo do dia selecionado (especialmente para 'hoje' em andamento)
-        let totalWorkedMs = 0;
-        let currentSegmentStart = null;
-        day.points.forEach(p => {
-            const type = p.tipo;
-            const timestamp = p.timestamp.toDate().getTime();
-            if (type === 'entrada' || type === 'volta') {
-                if(currentSegmentStart === null) currentSegmentStart = timestamp;
-            } else if ((type === 'saida' || type === 'pausa') && currentSegmentStart !== null) {
-                totalWorkedMs += (timestamp - currentSegmentStart);
-                currentSegmentStart = null;
-            }
-        });
-
-        // Se for hoje e ainda estiver trabalhando
-        if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
-            totalWorkedMs += (new Date().getTime() - currentSegmentStart);
-        }
-
-        day.totalMs = totalWorkedMs;
-
-        // --- INÍCIO DA CORREÇÃO ---
-
-        // Esta linha estava faltando no seu código e causou o erro:
-        const lastPointOfDay = day.points[day.points.length - 1]; 
-
-        // Esta é a sua nova lógica de 4/8 horas:
-        const userTargetMs = getTargetHoursMs(user.role); 
-
-        if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-            day.balanceMs = totalWorkedMs - userTargetMs;
-        } else if (dateKey === formatDateOnly(new Date())) {
-            // Se for hoje e não estiver finalizado, o saldo é 0
-            day.balanceMs = 0; 
-        } else {
-            // Se for um dia passado não finalizado, o saldo é negativo
-            day.balanceMs = totalWorkedMs - userTargetMs;
-        }
-        // --- FIM DA CORREÇÃO ---
-
-
-        return day;
-        }, [dailySummary.summary, viewDate, user.role]); // <-- ADICIONADO user.role
+    }, [points]);
 
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
@@ -1140,36 +740,42 @@ const ServidorDashboard = () => {
         return typeMap[lastPoint.tipo] || 'entrada';
     }, [lastPoint, isShiftFinishedToday]);
 
-    const registerPoint = useCallback(async (type) => {
+    // --- FUNÇÃO 1: Abre o modal de confirmação ---
+    const initiateRegisterPoint = (type) => {
         if (!userId || nextPointType === 'finished' || !isFirebaseInitialized) {
-            setGlobalMessage({ type: 'warning', title: 'Modo Demo', message: 'Registro de ponto desabilitado.'});
-            return;
+             // Mantém as verificações iniciais
+             if (!isFirebaseInitialized) {
+                 setGlobalMessage({ type: 'warning', title: 'Modo Demo', message: 'Registro de ponto desabilitado.'});
+             }
+             return;
         }
+        // Salva o tipo e a hora ATUAL do clique para confirmação
+        setPendingPoint({ type, timestamp: new Date() });
+        setIsConfirmPointModalOpen(true);
+    };
+
+    // --- FUNÇÃO 2: Realmente registra o ponto (chamada pelo Modal) ---
+    const confirmRegisterPoint = useCallback(async () => {
+        const { type, timestamp } = pendingPoint;
+        if (!userId || !type || !timestamp) return;
+        
         setClockInLoading(true);
 
         try {
             await addDoc(collection(db, pointCollectionPath), {
                 userId,
-                timestamp: new Date(),
+                timestamp: timestamp, // Usa o timestamp capturado no primeiro clique
                 tipo: type,
                 unidadeId: user.unidadeId,
             });
-            setGlobalMessage({ type: 'success', title: 'Ponto Registrado!', message: `Sua ${type} foi registrada.` });
+            setGlobalMessage({ type: 'success', title: 'Ponto Registrado!', message: `Sua ${type} foi registrada com sucesso.` });
+            setIsConfirmPointModalOpen(false); // Fecha o modal após sucesso
         } catch (dbError) {
             setGlobalMessage({ type: 'error', title: 'Erro no Sistema', message: `Falha ao salvar o ponto: ${dbError.message}` });
         } finally {
             setClockInLoading(false);
         }
-    }, [userId, db, pointCollectionPath, user?.unidadeId, nextPointType, setGlobalMessage]);
-
-    // Abre o modal de lista e marca as mensagens como lidas
-    const openNotificationList = () => {
-        setIsNotificationListOpen(true);
-        if (globalMessages.length > 0) {
-            localStorage.setItem(`lastReadTimestamp_${userId}`, globalMessages[0].createdAt.toDate().getTime().toString());
-        }
-        setUnreadCount(0);
-    };
+    }, [userId, db, pointCollectionPath, user?.unidadeId, pendingPoint, setGlobalMessage]);
 
     const buttonMap = {
         entrada: { label: 'Registrar Entrada', icon: LogIn, color: 'bg-emerald-600 hover:bg-emerald-700' },
@@ -1179,11 +785,6 @@ const ServidorDashboard = () => {
         finished: { label: 'Expediente Finalizado', icon: CheckCircle, color: 'bg-slate-400' },
     };
     const currentButton = buttonMap[nextPointType];
-
-    // Saldo do dia selecionado (para o card principal)
-    const selectedDayBalanceMs = selectedDayData.balanceMs;
-    // Saldo total (para o texto pequeno)
-    const totalBalanceMs = dailySummary.totalBalanceMs;
 
     return (
         <div className="p-4 md:p-8">
@@ -1203,20 +804,6 @@ const ServidorDashboard = () => {
                     </div>
                     <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
-
-                        <button
-                            onClick={openNotificationList}
-                            className="relative p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            aria-label="Ver mensagens"
-                        >
-                            <Bell className="w-5 h-5" />
-                            {unreadCount > 0 && (
-                                <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-600 text-white text-xs font-bold text-center" style={{ fontSize: '0.6rem', lineHeight: '1rem' }}>
-                                    {unreadCount}
-                                </span>
-                            )}
-                        </button>
-
                         <button
                             onClick={handleLogout}
                             className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"
@@ -1236,75 +823,20 @@ const ServidorDashboard = () => {
                                <p className={`text-2xl font-bold mt-1 ${nextPointType === 'finished' ? 'text-slate-500 dark:text-slate-400' : 'text-blue-600 dark:text-blue-400'}`}>{currentButton.label}</p>
                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Último: {lastPoint ? `${lastPoint.tipo} às ${formatTime(lastPoint.timestamp)}` : 'Nenhum registro hoje'}</p>
                             </div>
-                            <button onClick={() => registerPoint(nextPointType)} disabled={clockInLoading || (viewDate !== getTodayISOString())} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
+                            <button onClick={() => initiateRegisterPoint(nextPointType)} disabled={clockInLoading || nextPointType === 'finished'} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
                                 {clockInLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <currentButton.icon className="w-5 h-5 mr-2" />}
-                                {clockInLoading ? 'Processando...' : (viewDate !== getTodayISOString() ? 'Visualizando outro dia' : currentButton.label)}
+                                {clockInLoading ? 'Processando...' : currentButton.label}
                             </button>
                         </div>
                     </div>
-                     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                         <div className="flex justify-between items-center mb-2">
-                             <label htmlFor="banco-date" className="text-sm font-medium text-slate-500 dark:text-slate-400">Banco de Horas do Dia:</label>
-                             <input 
-                                type="date"
-                                id="banco-date"
-                                value={viewDate}
-                                onChange={(e) => setViewDate(e.target.value)}
-                                className="p-1 text-sm border-none rounded-lg bg-slate-100 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                            />
-                         </div>
-                         <p className={`text-4xl font-bold mt-1 ${selectedDayBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {formatDuration(selectedDayBalanceMs)}
+                     <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800 flex flex-col justify-center">
+                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Banco de Horas</p>
+                         <p className={`text-4xl font-bold mt-1 ${dailySummary.totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                            {formatDuration(dailySummary.totalBalanceMs)}
                          </p>
-                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">
-                            Total Trabalhado no Dia: {formatDuration(selectedDayData.totalMs)}
-                         </p>
-                         <hr className="my-3 border-slate-200 dark:border-gray-700"/>
-                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Saldo Total Acumulado:</p>
-                         <p className={`text-lg font-bold ${totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                            {formatDuration(totalBalanceMs)}
-                         </p>
+                         <p className="text-sm font-medium text-slate-500 dark:text-slate-400 mt-2">Jornada Padrão: 8h/dia</p>
                     </div>
                 </div>
-
-                <section className="mb-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                   <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 mb-4 flex items-center">
-                       <Calendar className="w-5 h-5 mr-2 text-blue-500" />
-                       Registros de {new Date(viewDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}
-                   </h2>
-                   <div className="overflow-x-auto">
-                        <table className="min-w-full">
-                            <thead>
-                                <tr>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo</th>
-                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Hora</th>
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                {selectedDayData.points.length > 0 ? (
-                                    selectedDayData.points.map(ponto => (
-                                        <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                            <td className="px-4 py-3">
-                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[ponto.tipo]}`}>
-                                                    {ponto.tipo}
-                                                </span>
-                                            </td>
-                                            <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-200">
-                                                {formatTime(ponto.timestamp)}
-                                            </td>
-                                        </tr>
-                                    ))
-                                ) : (
-                                    <tr>
-                                        <td colSpan="2" className="py-8 text-center text-slate-500 dark:text-slate-400">
-                                            Nenhum registro encontrado para este dia.
-                                        </td>
-                                    </tr>
-                                )}
-                            </tbody>
-                        </table>
-                   </div>
-                </section>
 
                 <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                    <div className="flex justify-between items-center mb-4">
@@ -1340,6 +872,18 @@ const ServidorDashboard = () => {
                 </section>
 
                  <SolicitationModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+
+                 {/* --- NOVO MODAL DE CONFIRMAÇÃO DE PONTO ADICIONADO --- */}
+                 <PointConfirmationModal 
+                    isOpen={isConfirmPointModalOpen}
+                    onClose={() => setIsConfirmPointModalOpen(false)}
+                    onConfirm={confirmRegisterPoint}
+                    type={pendingPoint.type}
+                    timestamp={pendingPoint.timestamp}
+                    isLoading={clockInLoading}
+                 />
+                 {/* --------------------------------------------------- */}
+
                  <GlobalMessagesViewerModal 
                     isOpen={isNotificationListOpen} 
                     onClose={() => setIsNotificationListOpen(false)} 
@@ -1354,148 +898,82 @@ const ServidorDashboard = () => {
 };
 
 const GestorDashboard = () => {
-    const { user, db, handleLogout, unidades, globalMessages, allUsers } = useAuthContext();
+    const { user, db, handleLogout, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
     const [viewingFile, setViewingFile] = useState(null);
 
+    // --- INÍCIO DAS NOVAS ADIÇÕES ---
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
-
-    const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
-    const [searchTerm, setSearchTerm] = useState('');
-    const [selectedDate, setSelectedDate] = useState(getTodayISOString());
-    const [activeTab, setActiveTab] = useState('solicitacoes'); 
-
-    const [isNotificationListOpen, setIsNotificationListOpen] = useState(false);
-    const [unreadCount, setUnreadCount] = useState(0);
-    const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
-
-    const [viewingMessageReads, setViewingMessageReads] = useState(null);
-
-    // --- NOVO: State para o modal de edição de ponto ---
-    const [editingPoint, setEditingPoint] = useState(null); // { ponto, servidorId, servidorNome }
-
     const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
+    // --- FIM DAS NOVAS ADIÇÕES ---
+
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
+    const unidadeNome = unidades[user?.unidadeId]?.name || 'Unidade não encontrada';
 
     useEffect(() => {
-        if (!isFirebaseInitialized) return;
-
+        if (!isFirebaseInitialized || !user?.unidadeId) return;
         const q = query(
             collection(db, solicitacoesCollectionPath),
+            where('unidadeId', '==', user.unidadeId),
             orderBy('createdAt', 'desc')
         );
-
         const unsubscribe = onSnapshot(q, (snapshot) => {
             setSolicitacoes(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
         });
         return () => unsubscribe();
-    }, [db, solicitacoesCollectionPath]);
+    }, [db, solicitacoesCollectionPath, user?.unidadeId]);
 
+    // --- INÍCIO DO NOVO useEffect ---
+    // Busca servidores e seus registros de ponto recentes
     useEffect(() => {
-        if (globalMessages.length > 0) {
-            const newUnreadCount = globalMessages.filter(
-                msg => msg.createdAt.toDate().getTime() > lastReadTimestamp
-            ).length;
-            setUnreadCount(newUnreadCount);
-        }
-    }, [globalMessages, lastReadTimestamp]);
-
-    useEffect(() => {
-        if (!isFirebaseInitialized) {
+        if (!isFirebaseInitialized || !user?.unidadeId) {
             setLoadingRegistros(false);
             return;
         }
 
-        setServidoresDaUnidade(allUsers.filter(u => u.role === 'servidor'));
-
-    }, [allUsers]);
-
-    useEffect(() => {
-        if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
-            setLoadingRegistros(false); 
-            setPontosDosServidores({}); // Limpa os pontos se não houver data ou servidores
-            return;
-        }
-
-        const fetchPontosPorData = async () => {
+        const fetchRegistros = async () => {
             setLoadingRegistros(true);
             try {
-                const date = new Date(selectedDate);
-                date.setMinutes(date.getMinutes() + date.getTimezoneOffset());
-                const startOfDay = new Date(date.setHours(0, 0, 0, 0));
-                const endOfDay = new Date(date.setHours(23, 59, 59, 999));
+                // 1. Buscar todos os servidores da unidade do gestor
+                const qServidores = query(collection(db, usersCollectionPath), 
+                                          where('unidadeId', '==', user.unidadeId), 
+                                          where('role', '==', 'servidor'));
+                const servidoresSnapshot = await getDocs(qServidores);
+                const servidores = servidoresSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+                setServidoresDaUnidade(servidores);
 
+                // 2. Para cada servidor, buscar seus 10 últimos registros de ponto
                 const pontosMap = {};
-                for (const servidor of servidoresDaUnidade) {
+                for (const servidor of servidores) {
                     const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
-
-                    const qPontos = query(
-                        collection(db, pointCollectionPath), 
-                        where('timestamp', '>=', startOfDay),
-                        where('timestamp', '<=', endOfDay),
-                        orderBy('timestamp', 'desc') // Mantém a ordem DESC para exibir
-                    );
-
+                    const qPontos = query(collection(db, pointCollectionPath), 
+                                          orderBy('timestamp', 'desc'), 
+                                          limit(10)); // Buscamos os 10 mais recentes
+                    
                     const pontosSnapshot = await getDocs(qPontos);
                     pontosMap[servidor.id] = pontosSnapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
                 }
                 setPontosDosServidores(pontosMap);
 
             } catch (error) {
-                console.error("Erro ao buscar pontos por data:", error);
+                console.error("Erro ao buscar registros da unidade:", error);
                 setGlobalMessage({ 
                     type: 'error', 
-                    title: 'Erro de Query', 
-                    message: `Não foi possível buscar os registros. Pode ser necessário criar um índice no Firestore. Verifique o console (F12) para um link de criação de índice.` 
+                    title: 'Erro de Leitura', 
+                    message: 'Não foi possível carregar os registros de ponto. Verifique as regras de segurança do Firestore.' 
                 });
             } finally {
                 setLoadingRegistros(false);
             }
         };
 
-        fetchPontosPorData();
-    }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
-
-// --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
-    const handleUpdatePointTime = async (newTime, observacao) => { // <-- MODIFICADO
-        if (!editingPoint) return;
-
-        const [hours, minutes] = newTime.split(':').map(Number);
-
-        // Pega a data original (do dia selecionado) e aplica a nova hora/minuto
-        const originalTimestamp = editingPoint.timestamp.toDate();
-        const newDate = new Date(originalTimestamp);
-        newDate.setHours(hours);
-        newDate.setMinutes(minutes);
-
-        const pointDocRef = doc(db, `artifacts/${appId}/users/${editingPoint.servidorId}/registros_ponto`, editingPoint.id);
-
-        try {
-            await updateDoc(pointDocRef, {
-                timestamp: newDate,
-                observacao: observacao || null // <-- ADICIONADO: Salva a observação
-            });
-
-            // Atualiza o state local para refletir a mudança imediatamente
-            setPontosDosServidores(prevMap => ({
-                ...prevMap,
-                [editingPoint.servidorId]: prevMap[editingPoint.servidorId].map(p =>
-                    p.id === editingPoint.id ? { ...p, timestamp: Timestamp.fromDate(newDate), observacao: observacao || null } : p // <-- MODIFICADO
-                ).sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate()) // Re-ordena DESC
-            }));
-
-            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Registro de ponto atualizado.' });
-            setEditingPoint(null);
-        } catch (error) {
-            console.error("Erro ao atualizar ponto:", error);
-            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar a alteração: ${error.message}` });
-        }
-    };
-    // --- FIM DA FUNÇÃO ATUALIZADA ---
+        fetchRegistros();
+    }, [db, user?.unidadeId, usersCollectionPath, setGlobalMessage]);
+    // --- FIM DO NOVO useEffect ---
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -1514,109 +992,70 @@ const GestorDashboard = () => {
         }
     }, [db, solicitacoesCollectionPath, user.uid, setGlobalMessage]);
 
-    const filteredServidores = useMemo(() => {
-        return servidoresDaUnidade
-            .filter(servidor => {
-                if (selectedUnidadeId === 'all') return true; 
-                if (selectedUnidadeId === 'null') return !servidor.unidadeId; 
-                return servidor.unidadeId === selectedUnidadeId; 
-            })
-            .filter(servidor => {
-                if (searchTerm.trim() === '') return true; 
-                const nome = servidor.nome?.toLowerCase() || '';
-                const matricula = servidor.matricula || '';
-                const termo = searchTerm.toLowerCase();
-                return nome.includes(termo) || matricula.includes(termo);
-            });
-    }, [servidoresDaUnidade, selectedUnidadeId, searchTerm]);
-
+    // --- INÍCIO DA NOVA FUNÇÃO PDF ---
     const handleGerarRelatorio = async () => {
         setGlobalMessage({ type: 'success', title: 'Relatório', message: 'Gerando relatório, aguarde...' });
 
-        if (filteredServidores.length === 0) {
-             setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado (com base nos filtros) para gerar relatório.' });
-             return;
-        }
-
-        const doc = new jsPDF();
-
-        let titulo = 'Relatório de Pontos';
-        if (selectedUnidadeId !== 'all' && selectedUnidadeId !== 'null') {
-            titulo = `Unidade: ${unidades[selectedUnidadeId]?.name}`;
-        } else if (selectedUnidadeId === 'null') {
-            titulo = 'Unidade: Servidores Sem Unidade';
-        } else {
-            titulo = 'Relatório de Todas as Unidades';
-        }
-
-        doc.text(titulo, 14, 16);
-        doc.setFontSize(12);
-        doc.text(`Data: ${new Date(selectedDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}`, 14, 22);
-        doc.setFontSize(10);
-        doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 28);
-
-        const corpoTabela = [];
-
-        for (const servidor of filteredServidores) {
-            const unidadeServidor = unidades[servidor.unidadeId]?.name || 'Sem Unidade';
-
-            corpoTabela.push([
-                { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula}) - Unidade: ${unidadeServidor}`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
-            ]);
-
-            const pontos = pontosDosServidores[servidor.id];
-            if (!pontos || pontos.length === 0) {
-                corpoTabela.push([{ content: 'Nenhum registro encontrado para esta data.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
-            } else {
-                [...pontos].reverse().forEach(ponto => {
-                    corpoTabela.push([
-                        formatDateOnly(ponto.timestamp),
-                        ponto.tipo,
-                        formatTime(ponto.timestamp)
-                    ]);
-                });
-            }
-        }
-
-        doc.autoTable({
-            startY: 35,
-            head: [['Data', 'Tipo', 'Hora']],
-            body: corpoTabela,
-            theme: 'striped',
-            headStyles: { fillColor: [22, 160, 133] },
-        });
-
-        doc.save(`relatorio_pontos_${selectedDate}.pdf`);
-    };
-
-    const getFileNameFromUrl = (url) => {
-         try {
-             const decodedUrl = decodeURIComponent(url);
-             return decodedUrl.substring(decodedUrl.lastIndexOf('/') + 1);
-         } catch (e) {
-             return url.substring(url.lastIndexOf('/') + 1);
-         }
-    };
-
-    const openNotificationList = () => {
-        setIsNotificationListOpen(true);
-        if (globalMessages.length > 0) {
-            localStorage.setItem(`lastReadTimestamp_${user.uid}`, globalMessages[0].createdAt.toDate().getTime().toString());
-        }
-        setUnreadCount(0);
-    };
-
-    const handleDeleteMessage = async (messageId) => {
-        if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
-
         try {
-            const msgRef = doc(db, `artifacts/${appId}/public/data/global_messages`, messageId);
-            await deleteDoc(msgRef);
-            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Mensagem global excluída.' });
+            // 1. Buscar os servidores da unidade (reutiliza o state que já buscamos)
+            if (servidoresDaUnidade.length === 0) {
+                 setGlobalMessage({ type: 'warning', title: 'Aviso', message: 'Nenhum servidor encontrado nesta unidade para gerar relatório.' });
+                 return;
+            }
+
+            const doc = new jsPDF();
+            doc.text(`Relatório da Unidade: ${unidadeNome}`, 14, 16);
+            doc.setFontSize(10);
+            doc.text(`Gerado por: ${user.nome} em: ${new Date().toLocaleDateString('pt-BR')}`, 14, 22);
+
+            const corpoTabela = [];
+
+            // 2. Buscar TODOS os pontos de cada servidor
+            for (const servidor of servidoresDaUnidade) {
+                const pointCollectionPath = `artifacts/${appId}/users/${servidor.id}/registros_ponto`;
+                // Sem 'limit()' para buscar todos os registros para o PDF
+                const qPontos = query(collection(db, pointCollectionPath), orderBy('timestamp', 'desc')); 
+                const pontosSnapshot = await getDocs(qPontos);
+
+                corpoTabela.push([
+                    { content: `Servidor: ${servidor.nome} (Mat: ${servidor.matricula})`, colSpan: 3, styles: { fontStyle: 'bold', fillColor: '#f0f0f0' } }
+                ]);
+
+                if (pontosSnapshot.empty) {
+                    corpoTabela.push([{ content: 'Nenhum registro encontrado.', colSpan: 3, styles: { fontStyle: 'italic' } }]);
+                } else {
+                    // 3. Formatar os dados para a tabela
+                    pontosSnapshot.docs.forEach(pointDoc => {
+                        const ponto = pointDoc.data();
+                        corpoTabela.push([
+                            formatDateOnly(ponto.timestamp),
+                            ponto.tipo,
+                            formatTime(ponto.timestamp)
+                        ]);
+                    });
+                }
+            }
+
+            // 4. Gerar a tabela no PDF
+            doc.autoTable({
+                startY: 30,
+                head: [['Data', 'Tipo', 'Hora']],
+                body: corpoTabela,
+                theme: 'striped',
+                headStyles: { fillColor: [22, 160, 133] },
+            });
+
+            // 5. Salvar o arquivo
+            doc.save(`relatorio_${unidadeNome.replace(/ /g, '_')}.pdf`);
+
         } catch (error) {
-            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível excluir a mensagem: ${error.message}` });
+            console.error("Erro ao gerar PDF:", error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível gerar o relatório: ${error.message}` });
         }
     };
+    // --- FIM DA NOVA FUNÇÃO PDF ---
+
+    const getFileNameFromUrl = (url) => url.substring(url.lastIndexOf('/') + 1);
 
     return (
         <div className="p-4 md:p-8">
@@ -1627,270 +1066,148 @@ const GestorDashboard = () => {
                             <User className="inline-block w-8 h-8 mr-3 text-blue-600" /> Painel do Gestor
                         </h1>
                         <p className="text-slate-500 dark:text-slate-400 mt-1">
-                            Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>.
+                            Bem-vindo(a), <span className="font-semibold text-blue-600 dark:text-blue-400">{user.nome}</span>. Unidade: {unidadeNome}.
                         </p>
                     </div>
                      <div className="flex items-center space-x-3 self-end sm:self-center">
                         <ThemeToggleButton />
-
-                        <button
-                            onClick={openNotificationList}
-                            className="relative p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500"
-                            aria-label="Ver mensagens"
-                        >
-                            <Bell className="w-5 h-5" />
-                            {unreadCount > 0 && (
-                                <span className="absolute top-0 right-0 block h-4 w-4 rounded-full bg-red-600 text-white text-xs font-bold text-center" style={{ fontSize: '0.6rem', lineHeight: '1rem' }}>
-                                    {unreadCount}
-                                </span>
-                            )}
-                        </button>
-
                         <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30">
                             <LogOut className="w-4 h-4 mr-1.5" /> Sair
                         </button>
                     </div>
                 </header>
 
-                <div className="border-b mb-6 dark:border-gray-800">
-                    <nav className="flex space-x-2">
-                         <button onClick={() => setActiveTab('solicitacoes')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'solicitacoes' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Mail className="w-4 h-4 mr-2" /> Solicitações</button>
-                         <button onClick={() => setActiveTab('registros')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'registros' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Clock className="w-4 h-4 mr-2" /> Registros de Ponto</button>
-                         <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><MessageSquare className="w-4 h-4 mr-2" /> Mensagem Global</button>
-                    </nav>
-                </div>
+                <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                    {/* --- INÍCIO DA MODIFICAÇÃO (Botão PDF) --- */}
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
+                        <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
+                            <Mail className="w-5 h-5 mr-2 text-amber-500" />
+                            Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
+                        </h2>
+                        <button
+                            onClick={handleGerarRelatorio} // AQUI ESTÁ O BOTÃO
+                            className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition w-full sm:w-auto"
+                        >
+                            <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de Pontos
+                        </button>
+                    </div>
+                    {/* --- FIM DA MODIFICAÇÃO --- */}
 
-                {activeTab === 'solicitacoes' && (
-                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                                <Mail className="w-5 h-5 mr-2 text-amber-500" />
-                                Caixa de Solicitações ({solicitacoes.filter(s => s.status === 'pendente').length} pendentes)
-                            </h2>
-                        </div>
-                        <div className="overflow-x-auto">
-                            <table className="min-w-full">
-                                <thead className="border-b border-slate-200 dark:border-gray-800">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Unidade</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
-                                        <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
+
+                    <div className="overflow-x-auto">
+                        <table className="min-w-full">
+                            <thead className="border-b border-slate-200 dark:border-gray-800">
+                                <tr>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Servidor</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Tipo/Data</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Justificativa</th>
+                                    <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                {solicitacoes.map(sol => (
+                                    <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                        <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
+                                        <td className="px-4 py-4">
+                                            <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
+                                            <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
+                                        </td>
+                                        <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
+                                             <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
+                                            {sol.anexoUrl &&
+                                                <button onClick={() => setViewingFile({ url: sol.anexoUrl, name: getFileNameFromUrl(sol.anexoUrl) })} className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
+                                                    <File className="w-3 h-3 mr-1" /> Ver Anexo
+                                                </button>
+                                            }
+                                        </td>
+                                        <td className="px-4 py-4">
+                                            {sol.status === 'pendente' ? (
+                                                <div className="flex items-center space-x-2">
+                                                    <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                        {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                    </button>
+                                                    <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                        {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                    </button>
+                                                </div>
+                                            ) : (
+                                                <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                            )}
+                                        </td>
                                     </tr>
-                                </thead>
-                               <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                    {/* INÍCIO DA CORREÇÃO */}
-                                    {solicitacoes.length > 0 ? (
-                                        solicitacoes.map(sol => (
-                                            <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                                <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
-                                                <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
-                                                <td className="px-4 py-4">
-                                                    <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
-                                                    <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
-                                                </td>
-                                                <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
-                                                    <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
-                                                    {sol.anexoUrl &&
-                                                        <button onClick={() => setViewingFile({ 
-                                                                    url: sol.anexoUrl, 
-                                                                    name: sol.anexoNome || getFileNameFromUrl(sol.anexoUrl)
-                                                                })} 
-                                                                className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
-                                                            <File className="w-3 h-3 mr-1" /> Ver Anexo
-                                                        </button>
-                                                    }
-                                                </td>
-                                                <td className="px-4 py-4">
-                                                    {sol.status === 'pendente' ? (
-                                                        <div className="flex items-center space-x-2">
-                                                            <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
-                                                                {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
-                                                            </button>
-                                                            <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
-                                                                {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
-                                                            </button>
-                                                        </div>
-                                                    ) : (
-                                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
-                                                    )}
-                                                </td>
-                                            </tr>
-                                        ))
-                                    ) : (
-                                        <tr><td colSpan="5" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>
-                                    )}
-                                    {/* FIM DA CORREÇÃO */}
-                                </tbody>
-                            </table>
-                        </div>
-                    </section>
-                )}
+                                ))}
+                                {solicitacoes.length === 0 && <tr><td colSpan="4" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+                </section>
+                
+                {/* --- INÍCIO DA NOVA SEÇÃO DE REGISTROS --- */}
+                <section className="mt-8 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+                    <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
+                        <Clock className="w-5 h-5 mr-2 text-blue-500" />
+                        Registros de Ponto Recentes da Unidade
+                    </h2>
 
-                {activeTab === 'registros' && (
-                    <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-4 gap-3">
-                            <h2 className="text-xl font-semibold text-slate-800 dark:text-slate-100 flex items-center">
-                                <Clock className="w-5 h-5 mr-2 text-blue-500" />
-                                Registros de Ponto
-                            </h2>
-                            <button
-                                onClick={handleGerarRelatorio} 
-                                className="flex items-center text-sm font-medium bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 shadow-sm transition w-full sm:w-auto"
-                            >
-                                <FileText className="w-4 h-4 mr-2" /> Gerar Relatório de Pontos
-                            </button>
-                        </div>
-
-                        <div className="flex flex-col sm:flex-row gap-4 mb-6">
-                            <div className="flex-1">
-                                <label htmlFor="unitFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Filtrar por Unidade</label>
-                                <select
-                                    id="unitFilter"
-                                    value={selectedUnidadeId}
-                                    onChange={(e) => setSelectedUnidadeId(e.target.value)}
-                                    className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                >
-                                    <option value="all">Todas as Unidades</option>
-                                    <option value="null">Sem Unidade</option>
-                                    {Object.entries(unidades).map(([id, unit]) => (
-                                        <option key={id} value={id}>{unit.name}</option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="flex-1">
-                                <label htmlFor="searchFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Buscar Servidor</label>
-                                <div className="relative">
-                                    <input
-                                        type="text"
-                                        id="searchFilter"
-                                        placeholder="Buscar por nome ou matrícula..."
-                                        value={searchTerm}
-                                        onChange={(e) => setSearchTerm(e.target.value)}
-                                        className="w-full p-2 border rounded-lg pl-10 bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                    />
-                                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
-                                </div>
-                            </div>
-                            <div className="flex-1 sm:flex-none">
-                                <label htmlFor="dateFilter" className="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1">Data</label>
-                                <input
-                                    type="date"
-                                    id="dateFilter"
-                                    value={selectedDate}
-                                    onChange={(e) => setSelectedDate(e.target.value)}
-                                    className="w-full p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
-                                />
-                            </div>
-                        </div>
-
-                        {loadingRegistros ? (
-                            <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
-                        ) : (
-                            <div className="space-y-6">
-                                {filteredServidores.length === 0 ? (
-                                    <p className="text-slate-500 dark:text-slate-400 text-center py-4">
-                                        {searchTerm ? 'Nenhum servidor encontrado para sua busca.' : 'Nenhum servidor encontrado.'}
-                                    </p>
-                                ) : (
-                                    filteredServidores.map(servidor => (
-                                        <div key={servidor.id}>
-                                            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
-                                            <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
-                                                Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
-                                            </p>
-                                            <div className="overflow-x-auto border rounded-lg dark:border-gray-800">
-                                                <table className="min-w-full">
-                                                    <thead className="bg-slate-50 dark:bg-gray-800/50">
-                                                        <tr>
-                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
-                                                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Observação</th> {/* <-- ADICIONADO */}
-                                                            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Ações</th>
-                                                        </tr>
-                                                    </thead>
-                                                   <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                                                        {pontosDosServidores[servidor.id] && pontosDosServidores[servidor.id].length > 0 ? (
-                                                            pontosDosServidores[servidor.id].map(ponto => (
-                                                                <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                                                    <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
-                                                                    <td className="px-4 py-3 text-sm">
-                                                                        <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[ponto.tipo] || 'bg-gray-200 text-gray-800'}`}>
-                                                                            {ponto.tipo}
-                                                                        </span>
-                                                                    </td>
-                                                                    <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
-                                                                    {/* --- COLUNA DE OBSERVAÇÃO ADICIONADA --- */}
-                                                                    <td className="px-4 py-3 text-xs text-slate-500 dark:text-slate-400" title={ponto.observacao}>
-                                                                        {ponto.observacao ? (ponto.observacao.length > 20 ? ponto.observacao.substring(0, 20) + '...' : ponto.observacao) : '---'}
-                                                                    </td>
-                                                                    {/* --- FIM DA COLUNA ADICIONADA --- */}
-                                                                    <td className="px-4 py-3 text-right">
-                                                                        <button 
-                                                                            onClick={() => setEditingPoint({ ...ponto, servidorId: servidor.id, servidorNome: servidor.nome })}
-                                                                            className="p-1 text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300"
-                                                                            title="Ajustar horário"
-                                                                        >
-                                                                            <Edit3 className="w-4 h-4" />
-                                                                        </button>
-                                                                    </td>
-                                                                </tr>
-                                                            ))
-                                                        ) : (
-                                                            <tr>
-                                                                <td colSpan="5" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">
-                                                                    Nenhum registro de ponto para esta data.
+                    {loadingRegistros ? (
+                        <div className="text-center py-8"><Loader2 className="w-6 h-6 animate-spin mx-auto text-blue-600" /></div>
+                    ) : (
+                        <div className="space-y-6">
+                            {servidoresDaUnidade.length === 0 ? (
+                                <p className="text-slate-500 dark:text-slate-400 text-center py-4">Nenhum servidor encontrado nesta unidade.</p>
+                            ) : (
+                                servidoresDaUnidade.map(servidor => (
+                                    <div key={servidor.id}>
+                                        <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
+                                        <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">Matrícula: {servidor.matricula}</p>
+                                        <div className="overflow-x-auto border rounded-lg dark:border-gray-800">
+                                            <table className="min-w-full">
+                                                <thead className="bg-slate-50 dark:bg-gray-800/50">
+                                                    <tr>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Data</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Tipo</th>
+                                                        <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase">Hora</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                                                    {pontosDosServidores[servidor.id]?.length > 0 ? (
+                                                        pontosDosServidores[servidor.id].map(ponto => (
+                                                            <tr key={ponto.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                                                <td className="px-4 py-3 text-sm text-slate-700 dark:text-slate-300">{formatDateOnly(ponto.timestamp)}</td>
+                                                                <td className="px-4 py-3 text-sm">
+                                                                    <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${STATUS_COLORS[ponto.tipo] || 'bg-gray-200 text-gray-800'}`}>
+                                                                        {ponto.tipo}
+                                                                    </span>
                                                                 </td>
+                                                                <td className="px-4 py-3 text-sm font-semibold text-slate-800 dark:text-slate-200">{formatTime(ponto.timestamp)}</td>
                                                             </tr>
-                                                        )}
-                                                    </tbody>
-                                                </table>
-                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        <tr>
+                                                            <td colSpan="3" className="px-4 py-4 text-center text-sm text-slate-500 dark:text-slate-400">Nenhum registro de ponto recente.</td>
+                                                        </tr>
+                                                    )}
+                                                </tbody>
+                                            </table>
                                         </div>
-                                    ))
-                                )}
-                            </div>
-                        )}
-                    </section>
-                )}
-
-                {activeTab === 'messages' && (
-                    <GlobalMessagesManager role="gestor" />
-                )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    )}
+                </section>
+                {/* --- FIM DA NOVA SEÇÃO DE REGISTROS --- */}
 
                 <FileViewerModal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} fileUrl={viewingFile?.url} fileName={viewingFile?.name} />
-                <GlobalMessagesViewerModal 
-                    isOpen={isNotificationListOpen} 
-                    onClose={() => setIsNotificationListOpen(false)} 
-                    messages={globalMessages}
-                    role="gestor"
-                    allUsers={allUsers}
-                    onDelete={handleDeleteMessage}
-                    onViewReads={setViewingMessageReads}
-                />
-                <MessageReadStatusModal
-                    isOpen={!!viewingMessageReads}
-                    onClose={() => setViewingMessageReads(null)}
-                    message={viewingMessageReads}
-                />
-                {/* --- NOVO: Renderiza o modal de edição de ponto --- */}
-                <EditPointModal
-                    isOpen={!!editingPoint}
-                    onClose={() => setEditingPoint(null)}
-                    point={editingPoint}
-                    onSave={handleUpdatePointTime}
-                />
             </div>
         </div>
     );
 };
 
-// --- *** ATUALIZADO *** UserManagement (Correção Vercel) ---
 const UserManagement = () => {
-    const { db, unidades, allUsers } = useAuthContext();
+    const { db, unidades } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const [users, setUsers] = useState([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [editingUser, setEditingUser] = useState(null);
@@ -1899,16 +1216,23 @@ const UserManagement = () => {
 
     const usersCollectionPath = `artifacts/${appId}/public/data/${USER_COLLECTION}`;
 
-    // --- CORREÇÃO VERCEL: 'setAllUsers' removido ---
     useEffect(() => {
-        // Apenas define loading como 'false' quando 'allUsers' (do contexto) for carregado
-        // ou se o firebase não estiver inicializado (modo demo)
-        if (allUsers.length > 0 || !isFirebaseInitialized) {
+        if (!isFirebaseInitialized) {
+            setUsers([
+                {id: 'demo1', nome: 'Admin Demo', matricula: '001', role: 'rh', unidadeId: 'unidade-adm-01'},
+                {id: 'demo2', nome: 'Gestor Demo', matricula: '002', role: 'gestor', unidadeId: 'unidade-esc-01'},
+                {id: 'demo3', nome: 'Servidor Demo', matricula: '003', role: 'servidor', unidadeId: 'unidade-esc-01'},
+            ]);
             setLoading(false);
-        }
-    }, [allUsers, isFirebaseInitialized]);
-    // --- FIM DA CORREÇÃO ---
-
+            return;
+        };
+        const q = query(collection(db, usersCollectionPath));
+        const unsubscribe = onSnapshot(q, (snapshot) => {
+            setUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+            setLoading(false);
+        }, () => setLoading(false));
+        return () => unsubscribe();
+    }, [db, usersCollectionPath]);
 
     const handleUpdateUser = async (e) => {
         e.preventDefault();
@@ -1918,7 +1242,7 @@ const UserManagement = () => {
             const userDocRef = doc(db, usersCollectionPath, editingUser.id);
             await updateDoc(userDocRef, {
                 role: editingUser.role,
-                unidadeId: editingUser.unidadeId || null, 
+                unidadeId: editingUser.unidadeId,
                 nome: editingUser.nome,
                 matricula: editingUser.matricula
             });
@@ -1950,8 +1274,8 @@ const UserManagement = () => {
         setEditingUser({ ...editingUser, [e.target.name]: e.target.value });
     };
 
-    const filteredUsers = allUsers.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
-    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    const filteredUsers = users.filter(u => u.nome?.toLowerCase().includes(searchTerm.toLowerCase()) || u.matricula?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
@@ -2019,15 +1343,13 @@ const UserManagement = () => {
                                 <label className="text-sm font-medium dark:text-slate-300">Perfil</label>
                                 <select name="role" value={editingUser.role} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                                     <option value="servidor">Servidor</option>
-                                    <option value="estagiario">Estagiário</option> {/* <-- ADICIONADO */}
                                     <option value="gestor">Gestor</option>
                                     <option value="rh">RH/Admin</option>
                                 </select>
                             </div>
                             <div>
                                 <label className="text-sm font-medium dark:text-slate-300">Unidade</label>
-                                <select name="unidadeId" value={editingUser.unidadeId || ''} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
-                                    <option value="">Sem Unidade</option>
+                                <select name="unidadeId" value={editingUser.unidadeId} onChange={handleEditingChange} className="w-full p-2 border rounded-lg mt-1 dark:bg-gray-800 dark:border-gray-700 dark:text-white">
                                     {Object.entries(unidades).map(([id, unit]) => (
                                         <option key={id} value={id}>{unit.name}</option>
                                     ))}
@@ -2163,13 +1485,11 @@ const UnitManagement = () => {
     );
 };
 
-// --- Componente de Gerenciamento de Mensagens (Reutilizável) ---
-const GlobalMessagesManager = ({ role }) => {
-    const { user: currentUser, db, globalMessages, allUsers } = useAuthContext();
+const MessageBoxForAllUsers = () => {
+    const { user: currentUser, db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
-    const [viewingMessageReads, setViewingMessageReads] = useState(null);
     const messagesCollectionPath = `artifacts/${appId}/public/data/global_messages`;
 
     const handleSendMessage = async (e) => {
@@ -2182,7 +1502,6 @@ const GlobalMessagesManager = ({ role }) => {
                 senderName: currentUser.nome,
                 senderRole: currentUser.role,
                 createdAt: new Date(),
-                readBy: {}, // Inicia campo de leituras
             });
             setGlobalMessage({ type: 'success', title: 'Mensagem Enviada', message: 'Sua mensagem foi enviada para todos os usuários.' });
             setMessage('');
@@ -2193,78 +1512,17 @@ const GlobalMessagesManager = ({ role }) => {
         }
     };
 
-    const handleDeleteMessage = async (messageId) => {
-        if (!window.confirm("Tem certeza que deseja excluir esta mensagem global?")) return;
-
-        try {
-            const msgRef = doc(db, messagesCollectionPath, messageId);
-            await deleteDoc(msgRef);
-            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Mensagem global excluída.' });
-        } catch (error) {
-            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível excluir a mensagem: ${error.message}` });
-        }
-    };
-
     return (
-        <div className="space-y-6">
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
-                <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
-                <form onSubmit={handleSendMessage} className="space-y-3">
-                    <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
-                    <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
-                        {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
-                        {loading ? 'Enviando...' : 'Enviar Mensagem'}
-                    </button>
-                </form>
-            </div>
-
-            <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-                 <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100">Histórico de Mensagens</h3>
-                 <div className="space-y-4 max-h-[60vh] overflow-y-auto">
-                    {globalMessages.length === 0 ? (
-                            <p className="text-slate-500 dark:text-slate-400 text-center py-8">Nenhuma mensagem global encontrada.</p>
-                        ) : (
-                            globalMessages.map(msg => {
-                                const readCount = msg.readBy ? Object.keys(msg.readBy).length : 0;
-                                return (
-                                    <div key={msg.id} className="p-4 bg-slate-50 dark:bg-gray-800 rounded-lg border dark:border-gray-700">
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                                            Enviada por: <span className="font-medium">{msg.senderName} ({msg.senderRole})</span>
-                                        </p>
-                                        <p className="text-sm text-slate-500 dark:text-slate-400">
-                                            Em: {formatDateOnly(msg.createdAt)} às {formatTime(msg.createdAt)}
-                                        </p>
-                                        <p className="mt-3 text-base text-slate-700 dark:text-slate-200 whitespace-pre-wrap">{msg.text}</p>
-
-                                        <div className="flex items-center justify-between mt-4 pt-3 border-t dark:border-gray-700">
-                                            <button 
-                                                onClick={() => setViewingMessageReads(msg)}
-                                                className="flex items-center text-xs font-medium text-blue-600 dark:text-blue-400 hover:underline"
-                                            >
-                                                <Eye className="w-4 h-4 mr-1" />
-                                                Visualizado por {readCount}
-                                            </button>
-                                            <button 
-                                                onClick={() => handleDeleteMessage(msg.id)}
-                                                className="flex items-center text-xs font-medium text-red-600 dark:text-red-400 hover:underline"
-                                            >
-                                                <Trash2 className="w-4 h-4 mr-1" />
-                                                Excluir
-                                            </button>
-                                        </div>
-                                    </div>
-                                )
-                            })
-                        )}
-                 </div>
-            </div>
-
-            <MessageReadStatusModal
-                isOpen={!!viewingMessageReads}
-                onClose={() => setViewingMessageReads(null)}
-                message={viewingMessageReads}
-            />
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+            <h3 className="text-xl font-semibold mb-2 text-slate-800 dark:text-slate-100 flex items-center"><MessageSquare className="w-5 h-5 mr-2 text-blue-600"/> Enviar Mensagem Global</h3>
+            <p className="text-sm text-slate-500 dark:text-slate-400 mb-4">Envie uma notificação que aparecerá para todos os usuários ao entrarem no sistema.</p>
+            <form onSubmit={handleSendMessage} className="space-y-3">
+                <textarea value={message} onChange={(e) => setMessage(e.target.value)} placeholder="Digite sua mensagem aqui..." rows="4" required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white"></textarea>
+                <button type="submit" disabled={loading} className="w-full flex items-center justify-center py-2 px-4 rounded-lg text-white font-semibold bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400">
+                     {loading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <Send className="w-5 h-5 mr-2" />}
+                     {loading ? 'Enviando...' : 'Enviar Mensagem'}
+                </button>
+            </form>
         </div>
     );
 };
@@ -2272,7 +1530,7 @@ const GlobalMessagesManager = ({ role }) => {
 const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
-    const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    const roleMap = { 'servidor': 'Servidor', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
 
     return (
         <div className="p-4 md:p-8">
@@ -2298,7 +1556,7 @@ const RHAdminDashboard = () => {
 
                 {activeTab === 'users' && <UserManagement />}
                 {activeTab === 'units' && <UnitManagement />}
-                {activeTab === 'messages' && <GlobalMessagesManager role="rh" />}
+                {activeTab === 'messages' && <MessageBoxForAllUsers />}
             </div>
         </div>
     );
@@ -2315,58 +1573,8 @@ const Footer = () => {
 };
 
 const AppContent = () => {
-    const { user, role, isLoading, globalMessages, db } = useAuthContext();
+    const { user, role, isLoading } = useAuthContext();
     const [authView, setAuthView] = useState('login'); // 'login', 'signup', or 'forgotPassword'
-
-    const [newestMessage, setNewestMessage] = useState(null);
-    const [isNewMessageModalOpen, setIsNewMessageModalOpen] = useState(false);
-
-    // Verifica novas mensagens ao logar ou quando novas mensagens chegam
-    useEffect(() => {
-        if (!user || globalMessages.length === 0) {
-            return;
-        }
-
-        const lastReadTimestamp = localStorage.getItem(`lastReadTimestamp_${user.uid}`) || 0;
-        const newestMsg = globalMessages[0];
-
-        if (newestMsg.createdAt.toDate().getTime() > lastReadTimestamp) {
-            const alreadyRead = newestMsg.readBy && newestMsg.readBy[user.uid];
-
-            if (!alreadyRead) {
-                setNewestMessage(newestMsg);
-                setIsNewMessageModalOpen(true);
-            }
-        }
-
-    }, [globalMessages, user]);
-
-    // Marca a mensagem como ciente no Firestore
-    const handleAcknowledgeMessage = async (messageId) => {
-        if (!messageId || !user) return;
-
-        // Salva no localStorage (para o pop-up imediato)
-        const timestamp = newestMessage.createdAt.toDate().getTime().toString();
-        localStorage.setItem(`lastReadTimestamp_${user.uid}`, timestamp);
-
-        // Salva no Firestore (para o Admin/Gestor ver)
-        try {
-            const msgRef = doc(db, `artifacts/${appId}/public/data/global_messages`, messageId);
-            await updateDoc(msgRef, {
-                // Usamos a notação de ponto para atualizar um campo dentro de um map
-                [`readBy.${user.uid}`]: {
-                    nome: user.nome,
-                    matricula: user.matricula,
-                    readAt: new Date()
-                }
-            });
-        } catch (error) {
-            console.error("Erro ao marcar mensagem como cida:", error);
-        }
-
-        setIsNewMessageModalOpen(false);
-        setNewestMessage(null);
-    };
 
     if (isLoading) {
         return <LoadingScreen />;
@@ -2374,7 +1582,6 @@ const AppContent = () => {
 
     const dashboardMap = {
         servidor: <ServidorDashboard />,
-        estagiario: <ServidorDashboard />, // <-- ADICIONE ESTA LINHA
         gestor: <GestorDashboard />,
         rh: <RHAdminDashboard />
     };
@@ -2397,13 +1604,6 @@ const AppContent = () => {
                 ) : (
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
-
-                <NewMessageModal 
-                    isOpen={isNewMessageModalOpen}
-                    onClose={() => setIsNewMessageModalOpen(false)} // Fechar sem marcar como lido (pelo 'X')
-                    message={newestMessage}
-                    onAcknowledge={handleAcknowledgeMessage} // Clicar em "Entendido"
-                />
             </main>
             <Footer />
         </div>
