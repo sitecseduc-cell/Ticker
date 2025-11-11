@@ -1,10 +1,9 @@
-/* global __app_id, __firebase_config */
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
-    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, limit, Timestamp // <-- Timestamp importado
+    addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, Timestamp // <-- Timestamp importado
 } from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import {
@@ -1378,7 +1377,6 @@ const GestorDashboard = () => {
     // --- NOVO: State para o modal de edição de ponto ---
     const [editingPoint, setEditingPoint] = useState(null); // { ponto, servidorId, servidorNome }
 
-    const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
 
     useEffect(() => {
@@ -1906,7 +1904,7 @@ const UserManagement = () => {
         if (allUsers.length > 0 || !isFirebaseInitialized) {
             setLoading(false);
         }
-    }, [allUsers, isFirebaseInitialized]);
+    }, [allUsers]);
     // --- FIM DA CORREÇÃO ---
 
 
@@ -2077,7 +2075,7 @@ const UnitManagement = () => {
     const { db } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [units, setUnits] = useState([]);
-    const [loading, setLoading] = useState(true);
+    const [, setLoading] = useState(true);
     const [unitToEdit, setUnitToEdit] = useState(null);
     const [unitToDelete, setUnitToDelete] = useState(null);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -2165,7 +2163,7 @@ const UnitManagement = () => {
 
 // --- Componente de Gerenciamento de Mensagens (Reutilizável) ---
 const GlobalMessagesManager = ({ role }) => {
-    const { user: currentUser, db, globalMessages, allUsers } = useAuthContext();
+    const { user: currentUser, db, globalMessages } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [message, setMessage] = useState('');
     const [loading, setLoading] = useState(false);
