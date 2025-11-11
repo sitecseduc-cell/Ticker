@@ -1457,27 +1457,45 @@ const UnitManagement = () => {
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                            {/* --- INÍCIO DA CORREÇÃO --- */}
-                            {loading ? (
-                                <tr>
-                                    <td colSpan="2" className="py-8 text-center text-slate-500 dark:text-slate-400">
-                                        <Loader2 className="w-6 h-6 animate-spin mx-auto" />
-                                    </td>
-                                </tr>
-                            ) : (
-                                units.map(unit => (
-                                    <tr key={unit.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                        <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-200">{unit.name}</td>
-                                        <td className="px-4 py-3 text-right space-x-2">
-                                            <button onClick={() => setUnitToEdit(unit)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1"><Edit className="w-4 h-4" /></button>
-                                            <button onClick={() => setUnitToDelete(unit)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1"><Trash2 className="w-4 h-4" /></button>
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                            {/* --- FIM DA CORREÇÃO --- */}
-                        </tbody>
-                </table>
+                                    {/* --- INÍCIO DA CORREÇÃO --- */}
+                                    {solicitacoes.length > 0 ? (
+                                        solicitacoes.map(sol => (
+                                            <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                                <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
+                                                <td className="px-4 py-4">
+                                                    <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
+                                                    <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
+                                                </td>
+                                                <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
+                                                    <p className="truncate" title={sol.justificativaTexto}>{sol.justificativaTexto}</p>
+                                                    {sol.anexoUrl &&
+                                                        <button onClick={() => setViewingFile({ url: sol.anexoUrl, name: getFileNameFromUrl(sol.anexoUrl) })} className="text-blue-600 text-xs block mt-1 flex items-center hover:underline">
+                                                            <File className="w-3 h-3 mr-1" /> Ver Anexo
+                                                        </button>
+                                                    }
+                                                </td>
+                                                <td className="px-4 py-4">
+                                                    {sol.status === 'pendente' ? (
+                                                        <div className="flex items-center space-x-2">
+                                                            <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                                {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                            </button>
+                                                            <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                                {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                            </button>
+                                                        </div>
+                                                    ) : (
+                                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                                    )}
+                                                </td>
+                                            </tr>
+                                        ))
+                                    ) : (
+                                        <tr><td colSpan="4" className="py-8 text-center text-slate-500 dark:text-slate-400">Nenhuma solicitação pendente.</td></tr>
+                                    )}
+                                    {/* --- FIM DA CORREÇÃO --- */}
+                                </tbody>
+                     </table>
             </div>
             <UnitManagementModal isOpen={!!unitToEdit} onClose={() => setUnitToEdit(null)} onSave={handleSaveUnit} unit={unitToEdit} setUnit={setUnitToEdit} isLoading={isSubmitting} />
             <ConfirmationModal isOpen={!!unitToDelete} title="Confirmar Exclusão" message={`Deseja realmente excluir a unidade "${unitToDelete?.name}"?`} onConfirm={handleDeleteUnit} onCancel={() => setUnitToDelete(null)} isLoading={isSubmitting}/>
