@@ -1425,14 +1425,29 @@ const GestorDashboard = () => {
     }, [globalMessages, lastReadTimestamp]);
 
     useEffect(() => {
-        if (!isFirebaseInitialized) {
-            setLoadingRegistros(false);
-            return;
-        }
+        if (!isFirebaseInitialized) {
+            setLoadingRegistros(false);
+            return;
+        }
 
-        setServidoresDaUnidade(allUsers.filter(u => u.role === 'servidor'));
+        // 1. CORREÇÃO DE FILTRO: 
+        // Agora filtra por 'servidor' E 'estagiario'
+        const servidoresFiltrados = allUsers.filter(
+            u => u.role === 'servidor' || u.role === 'estagiario'
+        );
 
-    }, [allUsers]);
+        // 2. CORREÇÃO DE ORDEM:
+        // Organiza a lista filtrada em ordem alfabética pelo nome
+        servidoresFiltrados.sort((a, b) => {
+            // Adiciona uma verificação para o caso de algum nome ser nulo
+            const nomeA = a.nome || '';
+            const nomeB = b.nome || '';
+            return nomeA.localeCompare(nomeB);
+        });
+
+        setServidoresDaUnidade(servidoresFiltrados);
+
+    }, [allUsers]);
 
     useEffect(() => {
         if (!isFirebaseInitialized || !selectedDate || servidoresDaUnidade.length === 0) {
