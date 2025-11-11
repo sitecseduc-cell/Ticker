@@ -980,6 +980,7 @@ const ServidorDashboard = () => {
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
     const [clockInLoading, setClockInLoading] = useState(false);
+    const [actionToConfirm, setActionToConfirm] = useState(null); // <-- ADICIONE ESTE ESTADO
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
 
@@ -1161,13 +1162,14 @@ const ServidorDashboard = () => {
         }
     }, [userId, db, pointCollectionPath, user?.unidadeId, nextPointType, setGlobalMessage]);
 
-    // Abre o modal de lista e marca as mensagens como lidas
-    const openNotificationList = () => {
-        setIsNotificationListOpen(true);
-        if (globalMessages.length > 0) {
-            localStorage.setItem(`lastReadTimestamp_${userId}`, globalMessages[0].createdAt.toDate().getTime().toString());
-        }
-        setUnreadCount(0);
+    // Esta função será chamada pelo "Confirmar" do modal
+    const handleConfirmPoint = async () => {
+        if (!actionToConfirm) return;
+        
+        // A função registerPoint já cuida do setLoading(true/false)
+        await registerPoint(actionToConfirm); 
+        
+        setActionToConfirm(null); // Fecha o modal após o registro
     };
 
     const buttonMap = {
@@ -1235,7 +1237,7 @@ const ServidorDashboard = () => {
                                <p className={`text-2xl font-bold mt-1 ${nextPointType === 'finished' ? 'text-slate-500 dark:text-slate-400' : 'text-blue-600 dark:text-blue-400'}`}>{currentButton.label}</p>
                                <p className="text-sm text-slate-500 dark:text-slate-400 mt-1">Último: {lastPoint ? `${lastPoint.tipo} às ${formatTime(lastPoint.timestamp)}` : 'Nenhum registro hoje'}</p>
                             </div>
-                            <button onClick={() => registerPoint(nextPointType)} disabled={clockInLoading || (viewDate !== getTodayISOString())} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
+                                <button onClick={() => setActionToConfirm(nextPointType)} disabled={clockInLoading || (viewDate !== getTodayISOString())} className={`flex items-center justify-center w-full sm:w-auto px-6 py-3 rounded-lg text-white font-semibold transition shadow-md hover:shadow-lg transform hover:-translate-y-0.5 ${currentButton.color} disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-md`}>
                                 {clockInLoading ? <Loader2 className="w-5 h-5 mr-2 animate-spin" /> : <currentButton.icon className="w-5 h-5 mr-2" />}
                                 {clockInLoading ? 'Processando...' : (viewDate !== getTodayISOString() ? 'Visualizando outro dia' : currentButton.label)}
                             </button>
@@ -1347,8 +1349,17 @@ const ServidorDashboard = () => {
                     onDelete={() => {}} 
                     onViewReads={() => {}} 
                  />
-            </div>
+
+                <ConfirmationModal
+                    isOpen={!!actionToConfirm}
+                    title="Confirmar Registro de Ponto"
+                    message={`Tem certeza que deseja registrar sua ${actionToConfirm}?`}
+                    onConfirm={handleConfirmPoint}
+                    onCancel={() => setActionToConfirm(null)}
+                    isLoading={clockInLoading}
+                />
         </div>
+    </div>
     );
 };
 
