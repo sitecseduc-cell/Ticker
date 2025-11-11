@@ -1170,6 +1170,17 @@ const ServidorDashboard = () => {
         await registerPoint(actionToConfirm); 
         
         setActionToConfirm(null); // Fecha o modal após o registro
+        
+    };
+
+    // Abre o modal de lista e marca as mensagens como lidas
+    const openNotificationList = () => {
+        setIsNotificationListOpen(true);
+        if (globalMessages.length > 0) {
+            // Usa o user.uid que vem do contexto
+            localStorage.setItem(`lastReadTimestamp_${user.uid}`, globalMessages[0].createdAt.toDate().getTime().toString());
+        }
+        setUnreadCount(0);
     };
 
     const buttonMap = {
