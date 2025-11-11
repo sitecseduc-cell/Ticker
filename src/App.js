@@ -898,7 +898,7 @@ const GestorDashboard = () => {
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
-    const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, [appId]);
+    const usersCollectionPath = useMemo(() => `artifacts/${appId}/public/data/${USER_COLLECTION}`, []);
     // --- FIM DAS NOVAS ADIÇÕES ---
 
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
@@ -1094,7 +1094,7 @@ const GestorDashboard = () => {
                                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Status/Ações</th>
                                 </tr>
                             </thead>
-                            <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                            
                                 {solicitacoes.map(sol => (
                                     <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                         <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
@@ -1456,17 +1456,27 @@ const UnitManagement = () => {
                             <th className="px-4 py-3 text-right text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Ações</th>
                         </tr>
                     </thead>
-                     <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
-                        {units.map(unit => (
-                            <tr key={unit.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
-                                <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-200">{unit.name}</td>
-                                <td className="px-4 py-3 text-right space-x-2">
-                                    <button onClick={() => setUnitToEdit(unit)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1"><Edit className="w-4 h-4" /></button>
-                                    <button onClick={() => setUnitToDelete(unit)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1"><Trash2 className="w-4 h-4" /></button>
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
+                    <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                            {/* --- INÍCIO DA CORREÇÃO --- */}
+                            {loading ? (
+                                <tr>
+                                    <td colSpan="2" className="py-8 text-center text-slate-500 dark:text-slate-400">
+                                        <Loader2 className="w-6 h-6 animate-spin mx-auto" />
+                                    </td>
+                                </tr>
+                            ) : (
+                                units.map(unit => (
+                                    <tr key={unit.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
+                                        <td className="px-4 py-3 text-sm font-medium text-slate-900 dark:text-slate-200">{unit.name}</td>
+                                        <td className="px-4 py-3 text-right space-x-2">
+                                            <button onClick={() => setUnitToEdit(unit)} className="text-blue-600 hover:text-blue-800 dark:text-blue-400 dark:hover:text-blue-300 p-1"><Edit className="w-4 h-4" /></button>
+                                            <button onClick={() => setUnitToDelete(unit)} className="text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300 p-1"><Trash2 className="w-4 h-4" /></button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                            {/* --- FIM DA CORREÇÃO --- */}
+                        </tbody>
                 </table>
             </div>
             <UnitManagementModal isOpen={!!unitToEdit} onClose={() => setUnitToEdit(null)} onSave={handleSaveUnit} unit={unitToEdit} setUnit={setUnitToEdit} isLoading={isSubmitting} />
