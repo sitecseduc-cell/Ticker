@@ -882,16 +882,6 @@ const ServidorDashboard = () => {
                     timestamp={pendingPoint.timestamp}
                     isLoading={clockInLoading}
                  />
-                 {/* --------------------------------------------------- */}
-
-                 <GlobalMessagesViewerModal 
-                    isOpen={isNotificationListOpen} 
-                    onClose={() => setIsNotificationListOpen(false)} 
-                    messages={globalMessages}
-                    role="servidor"
-                    onDelete={() => {}} 
-                    onViewReads={() => {}} 
-                 />
             </div>
         </div>
     );
