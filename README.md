@@ -4,7 +4,7 @@
 [![React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://reactjs.org/)
 [![Create React App](https://img.shields.io/badge/CRA-5-09D3AC?logo=createreactapp&logoColor=white)](https://create-react-app.dev/)
 [![Firebase](https://img.shields.io/badge/Firebase-v12-FFCA28?logo=firebase&logoColor=black)](https://firebase.google.com/)
-[![Tailwind CSS](https://img.shields.io/badge/Tailwind%_CSS-3-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
+[![Tailwind CSS](https://img.shields.io/badge/Tailwind%20CSS-3-06B6D4?logo=tailwindcss&logoColor=white)](https://tailwindcss.com/)
 
 Um painel de dashboard simples e em tempo real, projetado para exibir estatísticas de produtividade (total de processos e último processo) de uma coleção do Firestore. Ideal para ser exibido em monitores de escritório.
 
