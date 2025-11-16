@@ -1683,6 +1683,11 @@ const GestorDashboard = () => {
     const [serverBalanceData, setServerBalanceData] = useState({ totalBalanceMs: 0, loading: false });
     // --- 👆 FIM DA ADIÇÃO 👆 ---
 
+    // --- 👇 ADICIONE ESTES DOIS NOVOS ESTADOS 👇 ---
+    const [solicitationToDelete, setSolicitationToDelete] = useState(null);
+    const [isDeletingSolicitation, setIsDeletingSolicitation] = useState(false);
+    // --- 👆 FIM DA ADIÇÃO 👆 ---
+
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
 
     useEffect(() => {
@@ -1971,6 +1976,27 @@ const GestorDashboard = () => {
     };
     // --- 👆 FIM DA NOVA FUNÇÃO 👆 ---
 
+    // --- 👇 COLE A NOVA FUNÇÃO DE EXCLUIR SOLICITAÇÃO AQUI 👇 ---
+    const handleDeleteSolicitation = async () => {
+        if (!solicitationToDelete) return;
+        setIsDeletingSolicitation(true);
+
+        const solDocRef = doc(db, solicitacoesCollectionPath, solicitationToDelete.id);
+
+        try {
+            await deleteDoc(solDocRef);
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Solicitação excluída com sucesso.' });
+            setSolicitationToDelete(null);
+            // O 'onSnapshot' (linha 1378) vai atualizar a lista automaticamente.
+        } catch (error) {
+            console.error("Erro ao excluir solicitação:", error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível excluir: ${error.message}` });
+        } finally {
+            setIsDeletingSolicitation(false);
+        }
+    };
+    // --- 👆 FIM DA NOVA FUNÇÃO 👆 ---
+
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
         try {
@@ -2178,39 +2204,53 @@ const GestorDashboard = () => {
                                                     }
                                                 </td>
                                                 <td className="px-4 py-4">
-                                                    {/* SE ESTIVER PENDENTE, DECIDIR OS BOTÕES */}
-                                                    {sol.status === 'pendente' ? (
-                                                        
-                                                        // SE FOR MENSAGEM, MOSTRAR "DAR CIÊNCIA"
-                                                        sol.tipo === 'mensagem' ? (
-                                                            <div className="flex items-center">
-                                                                <button 
-                                                                    onClick={() => handleAction(sol.id, 'ciente')} 
-                                                                    disabled={!!loadingAction} 
-                                                                    className="py-1 px-3 rounded-full text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300"
-                                                                >
-                                                                    {loadingAction === sol.id + 'ciente' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Marcar como Ciente'}
-                                                                </button>
-                                                            </div>
-                                                        ) : (
-                                                        // SENÃO (abono/justificativa), MOSTRAR "APROVAR/REPROVAR"
-                                                            <div className="flex items-center space-x-2">
-                                                                <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
-                                                                    {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
-                                                                </button>
-                                                                <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
-                                                                    {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
-                                                                </button>
-                                                            </div>
-                                                        )
+                                            {/* SE ESTIVER PENDENTE, DECIDIR OS BOTÕES */}
+                                            {sol.status === 'pendente' ? (
                                                 
-                                                    ) : (
-                                                        // SE NÃO ESTIVER PENDENTE, MOSTRAR O BADGE (com o novo texto)
-                                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>
-                                                            {sol.status === 'ciente' ? 'Ciente pelo Gestor' : sol.status}
-                                                        </span>
-                                                    )}
-                                                </td>
+                                                // SE FOR MENSAGEM, MOSTRAR "DAR CIÊNCIA"
+                                                sol.tipo === 'mensagem' ? (
+                                                    <div className="flex items-center space-x-2"> {/* Adicionado space-x-2 */}
+                                                        <button 
+                                                            onClick={() => handleAction(sol.id, 'ciente')} 
+                                                            disabled={!!loadingAction} 
+                                                            className="py-1 px-3 rounded-full text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300"
+                                                        >
+                                                            {loadingAction === sol.id + 'ciente' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Marcar como Ciente'}
+                                                        </button>
+                                                        {/* --- Botão Excluir (para 'mensagem') --- */}
+                                                        <button onClick={() => setSolicitationToDelete(sol)} className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" title="Excluir Solicitação">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                // SENÃO (abono/justificativa), MOSTRAR "APROVAR/REPROVAR"
+                                                    <div className="flex items-center space-x-2">
+                                                        <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                            {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                        </button>
+                                                        <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                            {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                        </button>
+                                                        {/* --- Botão Excluir (para 'abono/justif') --- */}
+                                                        <button onClick={() => setSolicitationToDelete(sol)} className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" title="Excluir Solicitação">
+                                                            <Trash2 className="w-4 h-4" />
+                                                        </button>
+                                                    </div>
+                                                )
+
+                                            ) : (
+                                                // SE NÃO ESTIVER PENDENTE, MOSTRAR O BADGE (com o novo texto)
+                                                <div className="flex items-center space-x-2">
+                                                    <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>
+                                                        {sol.status === 'ciente' ? 'Ciente pelo Gestor' : sol.status}
+                                                    </span>
+                                                    {/* --- Botão Excluir (para 'já resolvidos') --- */}
+                                                    <button onClick={() => setSolicitationToDelete(sol)} className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300" title="Excluir Solicitação">
+                                                        <Trash2 className="w-4 h-4" />
+                                                    </button>
+                                                </div>
+                                            )}
+                                        </td>
                                             </tr>
                                         ))
                                     ) : (
@@ -2443,6 +2483,17 @@ const GestorDashboard = () => {
                     onClose={() => setViewingServerBalance(null)}
                     serverName={viewingServerBalance?.nome}
                     balanceData={serverBalanceData}
+                />
+                {/* --- 👆 FIM DA ADIÇÃO 👆 --- */}
+
+                {/* --- 👇 ADICIONE O NOVO MODAL DE EXCLUSÃO DE SOLICITAÇÃO AQUI 👇 --- */}
+                <ConfirmationModal
+                    isOpen={!!solicitationToDelete}
+                    title="Excluir Solicitação"
+                    message={`Tem certeza que deseja excluir esta solicitação de "${solicitationToDelete?.tipo}"? Esta ação é irreversível.`}
+                    onConfirm={handleDeleteSolicitation}
+                    onCancel={() => setSolicitationToDelete(null)}
+                    isLoading={isDeletingSolicitation}
                 />
                 {/* --- 👆 FIM DA ADIÇÃO 👆 --- */}
             </div>
