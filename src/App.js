@@ -667,6 +667,105 @@ const EditPointModal = ({ isOpen, onClose, point, onSave }) => {
     );
 };
 
+// --- 👇 COLE O NOVO COMPONENTE AQUI 👇 ---
+// --- NOVO COMPONENTE: Modal de Adição Manual de Ponto ---
+const AddPointModal = ({ isOpen, onClose, servidorNome, onSave, selectedDate }) => {
+    const [tipo, setTipo] = useState('entrada');
+    const [newTime, setNewTime] = useState('08:00');
+    const [observacao, setObservacao] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    // Limpa a observação quando o modal é aberto
+    useEffect(() => {
+        if (isOpen) {
+            setObservacao('');
+        }
+    }, [isOpen]);
+
+    if (!isOpen) return null;
+
+    const handleSave = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        // Passa os 3 dados para a função de salvar
+        await onSave(tipo, newTime, observacao);
+        setLoading(false);
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <form onSubmit={handleSave} className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
+                <h3 className="text-lg font-bold text-slate-800 dark:text-slate-100">Adicionar Registro Manual</h3>
+                <div className="mt-4 space-y-3">
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Servidor: <span className="font-semibold">{servidorNome}</span>
+                    </p>
+                    <p className="text-sm text-slate-600 dark:text-slate-300">
+                        Data: <span className="font-semibold">{new Date(selectedDate).toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</span>
+                    </p>
+                    
+                    <div className="pt-2">
+                        <label htmlFor="tipo-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Tipo de Registro:
+                        </label>
+                        <select
+                            id="tipo-input"
+                            value={tipo}
+                            onChange={(e) => setTipo(e.target.value)}
+                            required
+                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        >
+                            <option value="entrada">Entrada</option>
+                            <option value="pausa">Pausa</option>
+                            <option value="volta">Volta da Pausa</option>
+                            <option value="saida">Saída</option>
+                        </select>
+                    </div>
+
+                    <div className="pt-2">
+                        <label htmlFor="time-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Horário do Registro:
+                        </label>
+                        <input
+                            type="time"
+                            id="time-input"
+                            value={newTime}
+                            onChange={(e) => setNewTime(e.target.value)}
+                            required
+                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                
+                    <div className="pt-2">
+                        <label htmlFor="observacao-input" className="block text-sm font-medium text-slate-700 dark:text-slate-300">
+                            Observação (Obrigatória):
+                        </label>
+                        <textarea
+                            id="observacao-input"
+                            value={observacao}
+                            onChange={(e) => setObservacao(e.target.value)}
+                            rows="3"
+                            placeholder="Ex: Lançamento manual por esquecimento do servidor..."
+                            required
+                            className="w-full mt-1 p-2 border rounded-lg bg-slate-50 dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500"
+                        />
+                    </div>
+                </div>
+                <div className="flex justify-end space-x-3 mt-6">
+                    <button type="button" onClick={onClose} className="px-4 py-2 text-slate-700 bg-slate-200 rounded-lg hover:bg-slate-300 dark:bg-gray-700 dark:text-slate-200 dark:hover:bg-gray-600 transition">
+                        Cancelar
+                    </button>
+                    <button type="submit" disabled={loading} className="px-4 py-2 text-white bg-blue-600 rounded-lg hover:bg-blue-700 transition disabled:bg-blue-400 flex items-center">
+                        {loading && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
+                        Adicionar Registro
+                    </button>
+                </div>
+            </form>
+        </div>
+    );
+};
+// --- 👆 FIM DO NOVO COMPONENTE 👆 ---
+
 
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
@@ -1398,6 +1497,7 @@ const GestorDashboard = () => {
 
     // --- NOVO: State para o modal de edição de ponto ---
     const [editingPoint, setEditingPoint] = useState(null); // { ponto, servidorId, servidorNome }
+    const [addingPointForUser, setAddingPointForUser] = useState(null); // <-- ADICIONE ESTA LINHA
 
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
 
@@ -1496,41 +1596,59 @@ const GestorDashboard = () => {
     }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
 
 // --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
-    const handleUpdatePointTime = async (newTime, observacao) => { // <-- MODIFICADO
-        if (!editingPoint) return;
+    // --- 👇 COLE A NOVA FUNÇÃO AQUI 👇 ---
+    const handleManuallyAddPoint = async (tipo, newTime, observacao) => {
+        if (!addingPointForUser || !selectedDate) return;
 
-        const [hours, minutes] = newTime.split(':').map(Number);
+        const { id: servidorId, unidadeId } = addingPointForUser;
 
-        // Pega a data original (do dia selecionado) e aplica a nova hora/minuto
-        const originalTimestamp = editingPoint.timestamp.toDate();
-        const newDate = new Date(originalTimestamp);
-        newDate.setHours(hours);
-        newDate.setMinutes(minutes);
+        // 1. Criar o novo Timestamp
+        // O input 'date' (selectedDate) nos dá YYYY-MM-DD
+        // O input 'time' (newTime) nos dá HH:MM
+        // Juntamos os dois para criar um Date local
+        const newDate = new Date(`${selectedDate}T${newTime}:00`);
 
-        const pointDocRef = doc(db, `artifacts/${appId}/users/${editingPoint.servidorId}/registros_ponto`, editingPoint.id);
+        const pointCollectionPath = `artifacts/${appId}/users/${servidorId}/registros_ponto`;
 
         try {
-            await updateDoc(pointDocRef, {
-                timestamp: newDate,
-                observacao: observacao || null // <-- ADICIONADO: Salva a observação
+            // 2. Adicionar o novo documento
+            const newDocRef = await addDoc(collection(db, pointCollectionPath), {
+                userId: servidorId,
+                unidadeId: unidadeId || null,
+                timestamp: newDate, // Salva como Timestamp
+                tipo: tipo,
+                observacao: `(Manual por ${user.nome}): ${observacao}` // Adiciona quem lançou
             });
 
-            // Atualiza o state local para refletir a mudança imediatamente
-            setPontosDosServidores(prevMap => ({
-                ...prevMap,
-                [editingPoint.servidorId]: prevMap[editingPoint.servidorId].map(p =>
-                    p.id === editingPoint.id ? { ...p, timestamp: Timestamp.fromDate(newDate), observacao: observacao || null } : p // <-- MODIFICADO
-                ).sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate()) // Re-ordena DESC
-            }));
+            // 3. Atualizar a UI localmente (para não precisar recarregar)
+            const newPoint = {
+                id: newDocRef.id,
+                userId: servidorId,
+                unidadeId: unidadeId || null,
+                timestamp: Timestamp.fromDate(newDate),
+                tipo: tipo,
+                observacao: `(Manual por ${user.nome}): ${observacao}`
+            };
 
-            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Registro de ponto atualizado.' });
-            setEditingPoint(null);
+            setPontosDosServidores(prevMap => {
+                const userPoints = prevMap[servidorId] || [];
+                const updatedPoints = [...userPoints, newPoint];
+                // Reordena para manter o mais recente em cima
+                updatedPoints.sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate());
+                return {
+                    ...prevMap,
+                    [servidorId]: updatedPoints
+                };
+            });
+
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Registro de ponto adicionado manualmente.' });
+            setAddingPointForUser(null); // Fecha o modal
         } catch (error) {
-            console.error("Erro ao atualizar ponto:", error);
-            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar a alteração: ${error.message}` });
+            console.error("Erro ao adicionar ponto manual:", error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar o registro: ${error.message}` });
         }
     };
-    // --- FIM DA FUNÇÃO ATUALIZADA ---
+    // --- 👆 FIM DA NOVA FUNÇÃO 👆 ---
 
     const handleAction = useCallback(async (solicitationId, newStatus) => {
         setLoadingAction(solicitationId + newStatus);
@@ -1831,7 +1949,17 @@ const GestorDashboard = () => {
                                 ) : (
                                     filteredServidores.map(servidor => (
                                         <div key={servidor.id}>
-                                            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
+                                            {/* ...POR ESTE BLOCO DE CÓDIGO: */}
+                                            <div className="flex justify-between items-center">
+                                                <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
+                                                <button
+                                                    onClick={() => setAddingPointForUser({ id: servidor.id, nome: servidor.nome, unidadeId: servidor.unidadeId })}
+                                                    className="flex items-center text-xs font-medium bg-emerald-600 text-white py-1 px-3 rounded-lg hover:bg-emerald-700 shadow-sm transition"
+                                                >
+                                                    <Plus className="w-4 h-4 mr-1" /> Adicionar Registro
+                                                </button>
+                                            </div>
+                                            {/* FIM DA SUBSTITUIÇÃO */}
                                             <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
                                                 Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
                                             </p>
@@ -1917,6 +2045,15 @@ const GestorDashboard = () => {
                     point={editingPoint}
                     onSave={handleUpdatePointTime}
                 />
+                {/* --- 👇 ADICIONE O NOVO MODAL AQUI 👇 --- */}
+                <AddPointModal
+                    isOpen={!!addingPointForUser}
+                    onClose={() => setAddingPointForUser(null)}
+                    servidorNome={addingPointForUser?.nome}
+                    selectedDate={selectedDate} // Passa a data selecionada no painel
+                    onSave={handleManuallyAddPoint}
+                />
+                {/* --- 👆 FIM DA ADIÇÃO 👆 --- */} 
             </div>
         </div>
     );
