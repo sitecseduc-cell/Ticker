@@ -1498,6 +1498,8 @@ const GestorDashboard = () => {
     // --- NOVO: State para o modal de edição de ponto ---
     const [editingPoint, setEditingPoint] = useState(null); // { ponto, servidorId, servidorNome }
     const [addingPointForUser, setAddingPointForUser] = useState(null); // <-- ADICIONE ESTA LINHA
+    const [pointToDelete, setPointToDelete] = useState(null); // <-- ADICIONE ESTA LINHA
+    const [isDeleting, setIsDeleting] = useState(false); // <-- ADICIONE ESTA LINHA
 
     const solicitacoesCollectionPath = useMemo(() => `artifacts/${appId}/public/data/solicitacoes`, []);
 
@@ -1646,6 +1648,34 @@ const GestorDashboard = () => {
         } catch (error) {
             console.error("Erro ao adicionar ponto manual:", error);
             setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar o registro: ${error.message}` });
+        }
+    };
+    // --- 👆 FIM DA NOVA FUNÇÃO 👆 ---
+
+    // --- 👇 COLE A NOVA FUNÇÃO DE EXCLUSÃO AQUI 👇 ---
+    const handleDeletePoint = async () => {
+        if (!pointToDelete) return;
+        setIsDeleting(true);
+
+        const { id: pontoId, servidorId } = pointToDelete;
+        const pointDocRef = doc(db, `artifacts/${appId}/users/${servidorId}/registros_ponto`, pontoId);
+
+        try {
+            await deleteDoc(pointDocRef);
+            
+            // Atualiza a UI localmente para remover o ponto
+            setPontosDosServidores(prevMap => ({
+                ...prevMap,
+                [servidorId]: prevMap[servidorId].filter(p => p.id !== pontoId)
+            }));
+            
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Registro de ponto excluído.' });
+            setPointToDelete(null);
+        } catch (error) {
+            console.error("Erro ao excluir ponto:", error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível excluir o registro: ${error.message}` });
+        } finally {
+            setIsDeleting(false);
         }
     };
     // --- 👆 FIM DA NOVA FUNÇÃO 👆 ---
@@ -1998,6 +2028,15 @@ const GestorDashboard = () => {
                                                                         >
                                                                             <Edit3 className="w-4 h-4" />
                                                                         </button>
+                                                                        {/* --- 2. 👇 COLE O NOVO BOTÃO DE EXCLUIR AQUI 👇 --- */}
+                                                                    <button 
+                                                                        onClick={() => setPointToDelete({ ...ponto, servidorId: servidor.id })}
+                                                                        className="p-1 text-red-600 hover:text-red-800 dark:text-red-400 dark:hover:text-red-300"
+                                                                        title="Excluir registro"
+                                                                    >
+                                                                        <Trash2 className="w-4 h-4" />
+                                                                    </button>
+                                                                    {/* --- 👆 FIM DO NOVO BOTÃO 👆 --- */}
                                                                     </td>
                                                                 </tr>
                                                             ))
@@ -2047,7 +2086,25 @@ const GestorDashboard = () => {
                     selectedDate={selectedDate} // Passa a data selecionada no painel
                     onSave={handleManuallyAddPoint}
                 />
-                {/* --- 👆 FIM DA ADIÇÃO 👆 --- */} 
+                {/* --- 👆 FIM DA ADIÇÃO 👆 --- */}
+                                                        
+                {/* --- 👇 COLOQUE O MODAL DE EDIÇÃO DE VOLTA 👇 --- */}
+                <EditPointModal
+                    isOpen={!!editingPoint}
+                    onClose={() => setEditingPoint(null)}
+                    point={editingPoint}
+                    onSave={handleUpdatePointTime}
+                />
+        
+                {/* --- 👇 ADICIONE O MODAL DE CONFIRMAÇÃO DE EXCLUSÃO 👇 --- */}
+                <ConfirmationModal
+                    isOpen={!!pointToDelete}
+                    title="Confirmar Exclusão"
+                    message={`Tem certeza que deseja excluir este registro de ${pointToDelete?.tipo} (${formatTime(pointToDelete?.timestamp)})? Esta ação é irreversível.`}
+                    onConfirm={handleDeletePoint}
+                    onCancel={() => setPointToDelete(null)}
+                    isLoading={isDeleting}
+                />                                       
             </div>
         </div>
     );
