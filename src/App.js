@@ -1307,9 +1307,9 @@ const ServidorDashboard = () => {
             const now = new Date();
             
             // Define a hora alvo: 16:50:00
-            //const targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 50, 0);
+            const targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 50, 0);
             //UTILIZAR APENAS AFINS PARA TESTE
-            const targetTime = new Date(Date.now() + 10000); // TESTE: Dispara em 10 segundos
+            //const targetTime = new Date(Date.now() + 10000); // TESTE: Dispara em 10 segundos
 
             // Calcula quantos milissegundos faltam até 16:50
             const msUntilTarget = targetTime.getTime() - now.getTime();
