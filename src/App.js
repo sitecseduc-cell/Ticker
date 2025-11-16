@@ -2038,13 +2038,7 @@ const GestorDashboard = () => {
                     onClose={() => setViewingMessageReads(null)}
                     message={viewingMessageReads}
                 />
-                {/* --- NOVO: Renderiza o modal de edição de ponto --- */}
-                <EditPointModal
-                    isOpen={!!editingPoint}
-                    onClose={() => setEditingPoint(null)}
-                    point={editingPoint}
-                    onSave={handleUpdatePointTime}
-                />
+                                                        
                 {/* --- 👇 ADICIONE O NOVO MODAL AQUI 👇 --- */}
                 <AddPointModal
                     isOpen={!!addingPointForUser}
