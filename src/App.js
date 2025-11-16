@@ -111,6 +111,24 @@ function useTheme() {
     return { theme, toggleTheme };
 }
 
+// --- 👇 ADICIONE ESTE NOVO HOOK 👇 ---
+function useClock() {
+    const [date, setDate] = useState(new Date());
+
+    useEffect(() => {
+        // Inicia um intervalo que atualiza o estado 'date' a cada segundo
+        const timerId = setInterval(() => {
+            setDate(new Date());
+        }, 1000); 
+
+        // Limpa o intervalo quando o componente é desmontado
+        return () => clearInterval(timerId);
+    }, []);
+
+    return date; // Retorna o objeto Date completo e atualizado
+}
+// --- 👆 FIM DO NOVO HOOK 👆 ---
+
 // --- Providers ---
 const ThemeProvider = ({ children }) => {
     const { theme, toggleTheme } = useTheme();
@@ -966,6 +984,16 @@ const formatDuration = (ms) => {
     return `${sign}${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
 };
 
+// --- 👇 ADICIONE ESTE NOVO HELPER 👇 ---
+const formatFullTime = (date) => {
+    if (!date) return '00:00:00';
+    const hours = String(date.getHours()).padStart(2, '0');
+    const minutes = String(date.getMinutes()).padStart(2, '0');
+    const seconds = String(date.getSeconds()).padStart(2, '0');
+    return `${hours}:${minutes}:${seconds}`;
+};
+// --- 👆 FIM DO NOVO HELPER 👆 ---
+
 const SolicitationModal = ({ isOpen, onClose }) => {
     const { user, db, storage } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1081,6 +1109,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 const ServidorDashboard = () => {
     const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const now = useClock(); // <-- ADICIONE ESTA LINHA
     const [points, setPoints] = useState([]);
     const [lastPoint, setLastPoint] = useState(null);
     const [clockInLoading, setClockInLoading] = useState(false);
@@ -1160,24 +1189,24 @@ const ServidorDashboard = () => {
 
             day.totalMs = totalWorkedMs;
 
-            // --- INÍCIO DA CORREÇÃO ---
-            const lastPointOfDay = day.points[day.points.length - 1];
-            const userTargetMs = getTargetHoursMs(user.role); // <-- SUA LÓGICA DE 4/8 HORAS
+           // --- INÍCIO DA CORREÇÃO ---
+            const lastPointOfDay = day.points[day.points.length - 1];
+            const userTargetMs = getTargetHoursMs(user.role); // <-- SUA LÓGICA DE 4/8 HORAS
 
-            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- USANDO A META CORRETA
-            } else {
-                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
-            }
-            // --- FIM DA CORREÇÃO ---
+            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- USANDO A META CORRETA
+            } else {
+                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
+            }
+            // --- FIM DA CORREÇÃO ---
 
-            // Apenas adiciona ao saldo total se o dia foi finalizado
-            if (day.balanceMs !== 0) {
-                totalBalanceMs += day.balanceMs;
-            }
-        });
-        return { summary, totalBalanceMs };
-    }, [points, user.role]); // <-- ADICIONADO user.role
+           // Apenas adiciona ao saldo total se o dia foi finalizado
+            if (day.balanceMs !== 0) {
+                totalBalanceMs += day.balanceMs;
+            }
+        });
+        return { summary, totalBalanceMs };
+    }, [points, user.role, now]); // <-- MUDE AQUI
 
     const selectedDayData = useMemo(() => {
         const dateObj = new Date(viewDate);
@@ -1343,6 +1372,21 @@ const ServidorDashboard = () => {
                     </div>
                 </header>
 
+                {/* --- 👇 ADICIONE ESTE NOVO BLOCO DE RELÓGIO 👇 --- */}
+                <div className="mb-6 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800 text-center">
+                    <h2 className="text-5xl font-bold text-slate-800 dark:text-slate-100 tracking-wider">
+                        {formatFullTime(now)}
+                    </h2>
+                    <p className="text-lg font-medium text-blue-600 dark:text-blue-400 mt-2">
+                        {/* Verificamos se o dia selecionado é hoje.
+                          Se for, mostramos o tempo real.
+                          Se não for, mostramos o tempo calculado para aquele dia.
+                        */}
+                        Horas Trabalhadas {viewDate === getTodayISOString() ? "Hoje" : "no Dia"}: {formatDuration(selectedDayData.totalMs)}
+                    </p>
+                </div>
+                {/* --- 👆 FIM DO NOVO BLOCO 👆 --- */}
+                                
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
                     <div className="md:col-span-2 bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
                        <h2 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100">Registrar Ponto</h2>
