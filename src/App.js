@@ -1597,9 +1597,45 @@ const GestorDashboard = () => {
         fetchPontosPorData();
     }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
 
+    const handleUpdatePointTime = async (newTime, observacao) => { 
+            if (!editingPoint) return;
+
+            const [hours, minutes] = newTime.split(':').map(Number);
+
+            // Pega a data original (do dia selecionado) e aplica a nova hora/minuto
+            const originalTimestamp = editingPoint.timestamp.toDate();
+            const newDate = new Date(originalTimestamp);
+            newDate.setHours(hours);
+            newDate.setMinutes(minutes);
+
+            const pointDocRef = doc(db, `artifacts/${appId}/users/${editingPoint.servidorId}/registros_ponto`, editingPoint.id);
+
+            try {
+                await updateDoc(pointDocRef, {
+                    timestamp: newDate,
+                    observacao: observacao || null // <-- ADICIONADO: Salva a observação
+                });
+
+                // Atualiza o state local para refletir a mudança imediatamente
+                setPontosDosServidores(prevMap => ({
+                    ...prevMap,
+                    [editingPoint.servidorId]: prevMap[editingPoint.servidorId].map(p =>
+                        p.id === editingPoint.id ? { ...p, timestamp: Timestamp.fromDate(newDate), observacao: observacao || null } : p // <-- MODIFICADO
+                    ).sort((a, b) => b.timestamp.toDate() - a.timestamp.toDate()) // Re-ordena DESC
+                }));
+
+                setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Registro de ponto atualizado.' });
+                setEditingPoint(null);
+            } catch (error) {
+                console.error("Erro ao atualizar ponto:", error);
+                setGlobalMessage({ type: 'error', title: 'Erro', message: `Não foi possível salvar a alteração: ${error.message}` });
+            }
+        };
+    // --- 👆 FIM DA FUNÇÃO QUE FALTAVA 👆 ---
+
 // --- FUNÇÃO ATUALIZADA: Salva a hora e a observação ---
     // --- 👇 COLE A NOVA FUNÇÃO AQUI 👇 ---
-    const handleManuallyAddPoint = async (tipo, newTime, observacao) => {
+   const handleManuallyAddPoint = async (tipo, newTime, observacao) => {
         if (!addingPointForUser || !selectedDate) return;
 
         const { id: servidorId, unidadeId } = addingPointForUser;
