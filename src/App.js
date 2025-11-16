@@ -2297,29 +2297,37 @@ const GestorDashboard = () => {
                                             - sm:justify-between sm:items-center: Aplica o alinhamento lado a lado apenas em telas 'sm' ou maiores.
                                             - gap-2 sm:gap-0: Adiciona um espaço de 2 unidades quando estão empilhados.
                                         */}
-                                            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-2 sm:gap-0">
-                                                <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">{servidor.nome}</h3>
-                                                
-                                                {/* MUDANÇAS DE LAYOUT:
-                                            - flex-shrink-0: Impede que os botões sejam "esmagados" ou quebrem linha.
-                                            - self-start sm:self-auto: Alinha os botões à esquerda em telas pequenas (quando empilhado).
+                                            {/* Container principal: 
+                                            - flex-wrap: Permite que os botões pulem para a próxima linha em telas pequenas.
+                                            - justify-between: Coloca o nome na esquerda e os botões na direita.
+                                            - items-center: Alinha verticalmente o nome e os botões.
+                                            - gap-3: Adiciona um espaço entre os itens.
                                         */}
-                                                <div className="flex items-center space-x-2 flex-shrink-0 self-start sm:self-auto">
-                                                    <button
-                                                        onClick={() => setViewingServerBalance(servidor)} // Passa o objeto 'servidor' inteiro
-                                                        className="flex items-center text-xs font-medium bg-blue-600 text-white py-1 px-3 rounded-lg hover:bg-blue-700 shadow-sm transition"
-                                                    >
-                                                        <Clock className="w-4 h-4 mr-1" /> Ver Saldo Total
-                                                    </button>
+                                        <div className="flex flex-wrap justify-between items-center gap-3">
+                                            {/* Item 1: O Nome */}
+                                            <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">
+                                                {servidor.nome}
+                                            </h3>
+                                            
+                                            {/* Item 2: Div dos Botões 
+                                                - flex-shrink-0: Impede que os botões encolham ou quebrem linha, mantendo-os sempre juntos.
+                                            */}
+                                            <div className="flex items-center space-x-2 flex-shrink-0">
+                                                <button
+                                                    onClick={() => setViewingServerBalance(servidor)}
+                                                    className="flex items-center text-xs font-medium bg-blue-600 text-white py-1 px-3 rounded-lg hover:bg-blue-700 shadow-sm transition"
+                                                >
+                                                    <Clock className="w-4 h-4 mr-1" /> Ver Saldo Total
+                                                </button>
 
-                                                    <button
-                                                        onClick={() => setAddingPointForUser({ id: servidor.id, nome: servidor.nome, unidadeId: servidor.unidadeId })}
-                                                        className="flex items-center text-xs font-medium bg-emerald-600 text-white py-1 px-3 rounded-lg hover:bg-emerald-700 shadow-sm transition"
-                                                    >
-                                                        <Plus className="w-4 h-4 mr-1" /> Adicionar Registro
-                                                    </button>
-                                                </div>
-                                         </div>
+                                                <button
+                                                    onClick={() => setAddingPointForUser({ id: servidor.id, nome: servidor.nome, unidadeId: servidor.unidadeId })}
+                                                    className="flex items-center text-xs font-medium bg-emerald-600 text-white py-1 px-3 rounded-lg hover:bg-emerald-700 shadow-sm transition"
+                                                >
+                                                    <Plus className="w-4 h-4 mr-1" /> Adicionar Registro
+                                                </button>
+                                            </div>
+                                        </div>
                                             {/* FIM DA SUBSTITUIÇÃO */}
                                             <p className="text-sm text-slate-500 dark:text-slate-400 mb-2">
                                                 Matrícula: {servidor.matricula} | Unidade: {unidades[servidor.unidadeId]?.name || 'N/A'}
