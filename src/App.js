@@ -56,6 +56,10 @@ const STATUS_COLORS = {
     pendente: 'text-yellow-700 bg-yellow-100 dark:bg-yellow-900/50 dark:text-yellow-400 border border-yellow-200 dark:border-yellow-800',
     aprovado: 'text-green-700 bg-green-100 dark:bg-green-900/50 dark:text-green-400 border border-green-200 dark:border-green-800',
     reprovado: 'text-red-700 bg-red-100 dark:bg-red-900/50 dark:text-red-400 border border-red-200 dark:border-red-800',
+    // --- 👇 ADICIONE ESTAS DUAS LINHAS 👇 ---
+    mensagem: 'text-blue-700 bg-blue-100 dark:bg-blue-900/50 dark:text-blue-400 border border-blue-200 dark:border-blue-800',
+    ciente: 'text-gray-700 bg-gray-100 dark:bg-gray-700 dark:text-gray-300 border border-gray-200 dark:border-gray-600',
+    // --- 👆 FIM DA ADIÇÃO 👆 ---
 };
 const TARGET_DAILY_HOURS_MS = 8 * 60 * 60 * 1000;
 const TARGET_INTERN_DAILY_HOURS_MS = 4 * 60 * 60 * 1000; // <-- ADICIONADO
@@ -1048,6 +1052,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
                         <select name="tipo" value={formData.tipo} onChange={handleChange} className="w-full px-3 py-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white focus:ring-2 focus:ring-blue-500">
                             <option value="abono">Abono (Ajuste de Registro)</option>
                             <option value="justificativa">Justificativa (Ausência)</option>
+                            <option value="mensagem">Mensagem (Aviso/Informação)</option>
                         </select>
                     </div>
                      <div className="space-y-1">
@@ -1436,11 +1441,13 @@ const ServidorDashboard = () => {
                                 {solicitacoes.slice(0, 5).map(sol => (
                                     <tr key={sol.id} className="hover:bg-slate-50 dark:hover:bg-gray-800/50">
                                         <td className="px-4 py-4 whitespace-nowrap">
-                                            <div className="text-sm font-medium text-slate-900 dark:text-slate-200">{sol.tipo === 'abono' ? 'Abono' : 'Justificativa'}</div>
+                                            <div className="text-sm font-medium text-slate-900 dark:text-slate-200">{sol.tipo === 'abono' ? 'Abono' : (sol.tipo === 'justificativa' ? 'Justificativa' : 'Mensagem')}
+                                            </div>
                                             <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
                                         </td>
                                         <td className="px-4 py-4 whitespace-nowrap">
-                                            <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                           <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status === 'ciente' ? 'Ciente pelo Gestor' : sol.status}
+                                           </span>
                                         </td>
                                     </tr>
                                 ))}
@@ -1906,7 +1913,8 @@ const GestorDashboard = () => {
                                                 <td className="px-4 py-4"><span className="text-sm font-medium text-slate-800 dark:text-slate-200">{sol.requesterNome}</span></td>
                                                 <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300">{unidades[sol.unidadeId]?.name || 'N/A'}</td>
                                                 <td className="px-4 py-4">
-                                                    <div className="font-semibold text-sm block">{sol.tipo.charAt(0).toUpperCase() + sol.tipo.slice(1)}</div>
+                                                    <div className="font-semibold text-sm block">{sol.tipo === 'abono' ? 'Abono' : (sol.tipo === 'justificativa' ? 'Justificativa' : 'Mensagem')}
+                                                    </div>
                                                     <div className="text-xs text-slate-500 dark:text-slate-400">{sol.dataOcorrencia}</div>
                                                 </td>
                                                 <td className="px-4 py-4 text-sm text-slate-600 dark:text-slate-300 max-w-xs">
@@ -1922,17 +1930,37 @@ const GestorDashboard = () => {
                                                     }
                                                 </td>
                                                 <td className="px-4 py-4">
+                                                    {/* SE ESTIVER PENDENTE, DECIDIR OS BOTÕES */}
                                                     {sol.status === 'pendente' ? (
-                                                        <div className="flex items-center space-x-2">
-                                                            <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
-                                                                {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
-                                                            </button>
-                                                            <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
-                                                                {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
-                                                            </button>
-                                                        </div>
+                                                        
+                                                        // SE FOR MENSAGEM, MOSTRAR "DAR CIÊNCIA"
+                                                        sol.tipo === 'mensagem' ? (
+                                                            <div className="flex items-center">
+                                                                <button 
+                                                                    onClick={() => handleAction(sol.id, 'ciente')} 
+                                                                    disabled={!!loadingAction} 
+                                                                    className="py-1 px-3 rounded-full text-xs font-semibold bg-blue-600 text-white hover:bg-blue-700 disabled:bg-slate-300"
+                                                                >
+                                                                    {loadingAction === sol.id + 'ciente' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Marcar como Ciente'}
+                                                                </button>
+                                                            </div>
+                                                        ) : (
+                                                        // SENÃO (abono/justificativa), MOSTRAR "APROVAR/REPROVAR"
+                                                            <div className="flex items-center space-x-2">
+                                                                <button onClick={() => handleAction(sol.id, 'aprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-green-600 text-white hover:bg-green-700 disabled:bg-slate-300">
+                                                                    {loadingAction === sol.id + 'aprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Aprovar'}
+                                                                </button>
+                                                                <button onClick={() => handleAction(sol.id, 'reprovado')} disabled={!!loadingAction} className="py-1 px-3 rounded-full text-xs font-semibold bg-red-600 text-white hover:bg-red-700 disabled:bg-slate-300">
+                                                                    {loadingAction === sol.id + 'reprovado' ? <Loader2 className="w-3 h-3 animate-spin"/> : 'Reprovar'}
+                                                                </button>
+                                                            </div>
+                                                        )
+                                                
                                                     ) : (
-                                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>{sol.status}</span>
+                                                        // SE NÃO ESTIVER PENDENTE, MOSTRAR O BADGE (com o novo texto)
+                                                        <span className={`px-2.5 py-0.5 inline-flex text-xs leading-5 font-semibold rounded-full ${STATUS_COLORS[sol.status]}`}>
+                                                            {sol.status === 'ciente' ? 'Ciente pelo Gestor' : sol.status}
+                                                        </span>
                                                     )}
                                                 </td>
                                             </tr>
