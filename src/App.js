@@ -1156,88 +1156,6 @@ const ServidorDashboard = () => {
         }
     }, [globalMessages, lastReadTimestamp]);
 
-    // --- 👇 COLE TODO O BLOCO DE CÓDIGO NOVO AQUI 👇 ---
-
-    // Efeito para agendar a notificação de saída
-    useEffect(() => {
-        // 1. Verifica se o usuário JÁ BATEU o ponto de saída.
-        // Se sim, a função para e não faz nada.
-        if (isShiftFinishedToday) {
-            return;
-        }
-
-        // 2. Verifica se o navegador suporta notificações
-        if (!("Notification" in window)) {
-            console.warn("Este navegador não suporta notificações de desktop.");
-            return;
-        }
-
-        // 3. Esta é a função que efetivamente MOSTRA a notificação
-        const showReminderNotification = () => {
-            // Verificamos de novo se a permissão é 'granted' (concedida)
-            if (Notification.permission === 'granted') {
-                new Notification('Lembrete de Ponto! ⏰', {
-                    body: 'Quase 17h! Não se esqueça de registrar sua SAÍDA.',
-                    icon: 'https://i.ibb.co/932Mzz8w/SITECicone.png', // Ícone da sua logo
-                    silent: false // Garante que faça som (se o PC permitir)
-                });
-            }
-        };
-
-        // 4. Esta função calcula o tempo e agenda o "despertador"
-        const scheduleReminder = () => {
-            const now = new Date();
-            
-            // Define a hora alvo: 16:50:00
-            //const targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 50, 0);
-            //UTILIZAR APENAS AFINS PARA TESTE
-            const targetTime = new Date(Date.now() + 10000); // TESTE: Dispara em 10 segundos
-
-            // Calcula quantos milissegundos faltam até 16:50
-            const msUntilTarget = targetTime.getTime() - now.getTime();
-
-            // Se já passou das 16:50, não faz nada
-            if (msUntilTarget <= 0) {
-                return null;
-            }
-
-            // Agenda o despertador (setTimeout)
-            const timerId = setTimeout(showReminderNotification, msUntilTarget);
-            return timerId; // Retorna o ID do timer para podermos cancelá-lo
-        };
-
-        // --- LÓGICA PRINCIPAL ---
-        let notificationTimerId = null;
-
-        // 5. Se o usuário JÁ DEU PERMISSÃO antes:
-        if (Notification.permission === 'granted') {
-            notificationTimerId = scheduleReminder();
-        } 
-        // 6. Se o usuário NUNCA RESPONDEU (ou negou):
-        else if (Notification.permission !== 'denied') {
-            // Pede a permissão. Isso mostra o pop-up "Permitir / Bloquear"
-            Notification.requestPermission().then((permission) => {
-                // Se ele clicar em "Permitir", agendamos a notificação
-                if (permission === 'granted') {
-                    notificationTimerId = scheduleReminder();
-                }
-            });
-        }
-
-        // 7. FUNÇÃO DE LIMPEZA:
-        // Se o usuário bater o ponto de saída (isShiftFinishedToday mudar),
-        // ou se ele fechar a aba, o React cancela o despertador (clearTimeout).
-        return () => {
-            if (notificationTimerId) {
-                clearTimeout(notificationTimerId);
-            }
-        };
-
-    // Esta é a dependência mais importante.
-    // O código acima só roda de novo se o status de "Turno Finalizado" mudar.
-    }, [isShiftFinishedToday]); 
-
-// --- 👆 FIM DO BLOCO NOVO 👆 ---
 
     const dailySummary = useMemo(() => {
         const summary = {};
@@ -1321,22 +1239,22 @@ const ServidorDashboard = () => {
 
         // --- INÍCIO DA CORREÇÃO ---
 
-        // Esta linha estava faltando no seu código e causou o erro:
-        const lastPointOfDay = day.points[day.points.length - 1]; 
+        // Esta linha estava faltando no seu código e causou o erro:
+        const lastPointOfDay = day.points[day.points.length - 1]; 
 
-        // Esta é a sua nova lógica de 4/8 horas:
-        const userTargetMs = getTargetHoursMs(user.role); 
+        // Esta é a sua nova lógica de 4/8 horas:
+        const userTargetMs = getTargetHoursMs(user.role); 
 
-        if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-            day.balanceMs = totalWorkedMs - userTargetMs;
-        } else if (dateKey === formatDateOnly(new Date())) {
-            // Se for hoje e não estiver finalizado, o saldo é 0
-            day.balanceMs = 0; 
-        } else {
-            // Se for um dia passado não finalizado, o saldo é negativo
-            day.balanceMs = totalWorkedMs - userTargetMs;
-        }
-        // --- FIM DA CORREÇÃO ---
+        if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+            day.balanceMs = totalWorkedMs - userTargetMs;
+        } else if (dateKey === formatDateOnly(now)) { // <-- MUDANÇA 3
+            // Se for hoje e não estiver finalizado, o saldo é 0
+            day.balanceMs = 0; 
+        } else {
+            // Se for um dia passado não finalizado, o saldo é negativo
+            day.balanceMs = totalWorkedMs - userTargetMs;
+        }
+        // --- FIM DA CORREÇÃO ---
 
 
         return day;
@@ -1355,6 +1273,89 @@ const ServidorDashboard = () => {
         const typeMap = { 'entrada': 'pausa', 'pausa': 'volta', 'volta': 'saida', 'saida': 'entrada' };
         return typeMap[lastPoint.tipo] || 'entrada';
     }, [lastPoint, isShiftFinishedToday]);
+
+    // --- 👇 COLE TODO O BLOCO DE CÓDIGO NOVO AQUI 👇 ---
+
+    // Efeito para agendar a notificação de saída
+    useEffect(() => {
+        // 1. Verifica se o usuário JÁ BATEU o ponto de saída.
+        // Se sim, a função para e não faz nada.
+        if (isShiftFinishedToday) {
+            return;
+        }
+
+        // 2. Verifica se o navegador suporta notificações
+        if (!("Notification" in window)) {
+            console.warn("Este navegador não suporta notificações de desktop.");
+            return;
+        }
+
+        // 3. Esta é a função que efetivamente MOSTRA a notificação
+        const showReminderNotification = () => {
+            // Verificamos de novo se a permissão é 'granted' (concedida)
+            if (Notification.permission === 'granted') {
+                new Notification('Lembrete de Ponto! ⏰', {
+                    body: 'Quase 17h! Não se esqueça de registrar sua SAÍDA.',
+                    icon: 'https://i.ibb.co/932Mzz8w/SITECicone.png', // Ícone da sua logo
+                    silent: false // Garante que faça som (se o PC permitir)
+                });
+            }
+        };
+
+        // 4. Esta função calcula o tempo e agenda o "despertador"
+        const scheduleReminder = () => {
+            const now = new Date();
+            
+            // Define a hora alvo: 16:50:00
+            //const targetTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), 16, 50, 0);
+            //UTILIZAR APENAS AFINS PARA TESTE
+            const targetTime = new Date(Date.now() + 10000); // TESTE: Dispara em 10 segundos
+
+            // Calcula quantos milissegundos faltam até 16:50
+            const msUntilTarget = targetTime.getTime() - now.getTime();
+
+            // Se já passou das 16:50, não faz nada
+            if (msUntilTarget <= 0) {
+                return null;
+            }
+
+            // Agenda o despertador (setTimeout)
+            const timerId = setTimeout(showReminderNotification, msUntilTarget);
+            return timerId; // Retorna o ID do timer para podermos cancelá-lo
+        };
+
+        // --- LÓGICA PRINCIPAL ---
+        let notificationTimerId = null;
+
+        // 5. Se o usuário JÁ DEU PERMISSÃO antes:
+        if (Notification.permission === 'granted') {
+            notificationTimerId = scheduleReminder();
+        } 
+        // 6. Se o usuário NUNCA RESPONDEU (ou negou):
+        else if (Notification.permission !== 'denied') {
+            // Pede a permissão. Isso mostra o pop-up "Permitir / Bloquear"
+            Notification.requestPermission().then((permission) => {
+                // Se ele clicar em "Permitir", agendamos a notificação
+                if (permission === 'granted') {
+                    notificationTimerId = scheduleReminder();
+                }
+            });
+        }
+
+        // 7. FUNÇÃO DE LIMPEZA:
+        // Se o usuário bater o ponto de saída (isShiftFinishedToday mudar),
+        // ou se ele fechar a aba, o React cancela o despertador (clearTimeout).
+        return () => {
+            if (notificationTimerId) {
+                clearTimeout(notificationTimerId);
+            }
+        };
+
+    // Esta é a dependência mais importante.
+    // O código acima só roda de novo se o status de "Turno Finalizado" mudar.
+    }, [isShiftFinishedToday]); 
+
+// --- 👆 FIM DO BLOCO NOVO 👆 ---
 
     const registerPoint = useCallback(async (type) => {
         if (!userId || nextPointType === 'finished' || !isFirebaseInitialized) {
