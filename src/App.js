@@ -2087,14 +2087,6 @@ const GestorDashboard = () => {
                     onSave={handleManuallyAddPoint}
                 />
                 {/* --- 👆 FIM DA ADIÇÃO 👆 --- */}
-                                                        
-                {/* --- 👇 COLOQUE O MODAL DE EDIÇÃO DE VOLTA 👇 --- */}
-                <EditPointModal
-                    isOpen={!!editingPoint}
-                    onClose={() => setEditingPoint(null)}
-                    point={editingPoint}
-                    onSave={handleUpdatePointTime}
-                />
         
                 {/* --- 👇 ADICIONE O MODAL DE CONFIRMAÇÃO DE EXCLUSÃO 👇 --- */}
                 <ConfirmationModal
