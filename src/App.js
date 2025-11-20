@@ -1264,7 +1264,7 @@ const ServidorDashboard = () => {
     }, [points, user.role, now, holidays]); // <-- ADICIONE 'holidays' AQUI
 
   // Substitua todo o bloco 'const selectedDayData = ...' por isto:
-    const selectedDayData = useMemo(() => {
+   const selectedDayData = useMemo(() => {
         const dateObj = new Date(viewDate);
         dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
         const dateKey = formatDateOnly(dateObj);
@@ -1297,10 +1297,10 @@ const ServidorDashboard = () => {
 
         const lastPointOfDay = day.points[day.points.length - 1];
         
-        // --- LÓGICA DE FERIADO (DEFINE userTargetMs APENAS UMA VEZ) ---
+        // --- CORREÇÃO: Define a variável APENAS UMA VEZ ---
         const isHoliday = holidays.includes(dateKey);
         const userTargetMs = isHoliday ? 0 : getTargetHoursMs(user.role);
-        // --------------------------------------------------------------
+        // --------------------------------------------------
 
         if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
             day.balanceMs = totalWorkedMs - userTargetMs;
@@ -1312,6 +1312,7 @@ const ServidorDashboard = () => {
 
         return day;
     }, [dailySummary.summary, viewDate, user.role, now, holidays]);
+    
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
         const lastDate = lastPoint.timestamp.toDate();
