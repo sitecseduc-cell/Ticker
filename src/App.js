@@ -1,11 +1,29 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
 import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
-import {getFirestore, doc, collection, query, where, orderBy, onSnapshot, addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, Timestamp // <-- Timestamp importado 
-from 'firebase/firestore';
+import {
+    getFirestore,
+    doc,
+    collection,
+    query,
+    where,
+    orderBy,
+    onSnapshot,
+    addDoc,
+    getDoc,
+    updateDoc,
+    deleteDoc,
+    getDocs,
+    setDoc,
+    Timestamp
+} from 'firebase/firestore';
 import { getStorage, ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import {LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,Calendar, Bell, Eye, BellRing, Edit3 // <-- Ícone de Edição adicionado}
-from 'lucide-react';
+import {
+    LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
+    AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
+    Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
+    Calendar, Bell, Eye, BellRing, Edit3
+} from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
