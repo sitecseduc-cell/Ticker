@@ -146,23 +146,18 @@ const AuthProvider = ({ children }) => {
     const [globalMessages, setGlobalMessages] = useState([]);
     const [allUsers, setAllUsers] = useState([]); 
 
-    // Carregar unidades
+   // --- 👇 2. ADICIONE ESTE NOVO useEffect AQUI 👇 ---
+    // Carregar Feriados
     useEffect(() => {
-        if (!isFirebaseInitialized) {
-            setUnidades({
-                'unidade-adm-01': { name: 'Controle e Movimentação (Demo)' },
-                'unidade-esc-01': { name: 'Escola Municipal A (Demo)' },
-            });
-            return;
-        }
-        const q = query(collection(db, `artifacts/${appId}/public/data/${UNIT_COLLECTION}`));
+        if (!isFirebaseInitialized) return;
+        const q = query(collection(db, `artifacts/${appId}/public/data/feriados`));
         const unsubscribe = onSnapshot(q, (snapshot) => {
-            const units = {};
-            snapshot.forEach(doc => units[doc.id] = doc.data());
-            setUnidades(units);
+            const loadedHolidays = snapshot.docs.map(doc => doc.data().date); // Guardamos apenas as datas (YYYY-MM-DD)
+            setHolidays(loadedHolidays);
         });
         return () => unsubscribe();
     }, []);
+    // --- 👆 FIM DO NOVO useEffect 👆 ---
 
     // Carregar mensagens globais
     useEffect(() => {
@@ -1149,7 +1144,7 @@ const SolicitationModal = ({ isOpen, onClose }) => {
 };
 
 const ServidorDashboard = () => {
-    const { user, userId, db, handleLogout, unidades, globalMessages } = useAuthContext();
+    const { user, userId, db, handleLogout, unidades, globalMessages, holidays } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const now = useClock(); // <-- ADICIONE ESTA LINHA
     const [points, setPoints] = useState([]);
@@ -1241,6 +1236,13 @@ const ServidorDashboard = () => {
 
             day.totalMs = totalWorkedMs;
 
+            // --- 👇 LÓGICA DE FERIADO AQUI 👇 ---
+            const isHoliday = holidays.includes(dateKey); // Verifica se a data está na lista de feriados
+            
+            // Se for feriado, a meta é 0. Se não, é a meta normal (4h ou 8h).
+            const userTargetMs = isHoliday ? 0 : getTargetHoursMs(user.role); 
+            // --- 👆 FIM DA LÓGICA 👆 ---
+
             // Calcula o saldo (Positivo ou Negativo)
             const lastPointOfDay = day.points[day.points.length - 1];
             const userTargetMs = getTargetHoursMs(user.role);
@@ -1259,7 +1261,7 @@ const ServidorDashboard = () => {
             }
         });
         return { summary, totalBalanceMs };
-    }, [points, user.role, now]); // 'now' garante atualização em tempo real
+    }, [points, user.role, now, holidays]); // <-- ADICIONE 'holidays' AQUI
 
   // Substitua todo o bloco 'const selectedDayData = ...' por isto:
     const selectedDayData = useMemo(() => {
@@ -1296,6 +1298,11 @@ const ServidorDashboard = () => {
         const lastPointOfDay = day.points[day.points.length - 1];
         const userTargetMs = getTargetHoursMs(user.role);
 
+        // --- 👇 LÓGICA DE FERIADO AQUI 👇 ---
+        const isHoliday = holidays.includes(dateKey);
+        const userTargetMs = isHoliday ? 0 : getTargetHoursMs(user.role);
+        // --- 👆 ---
+
         if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
             day.balanceMs = totalWorkedMs - userTargetMs;
         } else if (dateKey === formatDateOnly(now)) {
@@ -1305,7 +1312,7 @@ const ServidorDashboard = () => {
         }
 
         return day;
-    }, [dailySummary.summary, viewDate, user.role, now]);
+    }, [dailySummary.summary, viewDate, user.role, now, holidays]); // <-- ADICIONE 'holidays'
 
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
@@ -1656,7 +1663,7 @@ const ServidorDashboard = () => {
 };
 
 const GestorDashboard = () => {
-    const { user, db, handleLogout, unidades, globalMessages, allUsers } = useAuthContext();
+    const { user, db, handleLogout, unidades, globalMessages, allUsers, holidays } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
     const [solicitacoes, setSolicitacoes] = useState([]);
     const [loadingAction, setLoadingAction] = useState(null);
@@ -1841,29 +1848,38 @@ const GestorDashboard = () => {
                     currentSegmentStart = null;
                     }
                 });
-
+                
+                // --- 👇 LÓGICA DE FERIADO AQUI 👇 ---
+                const isHoliday = holidays.includes(dateKey);
+                const userTargetMs = isHoliday ? 0 : getTargetHoursMs(serverRole);
+                // --- 👆 ---
+                
                 // Pega a meta de horas do servidor (estagiário ou não)
                 const userTargetMs = getTargetHoursMs(serverRole);
                 const lastPointOfDay = day.points[day.points.length - 1];
 
-                // Só calcula saldo se o dia foi finalizado
-                if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                    day.balanceMs = totalWorkedMs - userTargetMs;
-                    totalBalanceMs += day.balanceMs;
-                }
-            });
+               if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+                    day.balanceMs = totalWorkedMs - userTargetMs;
+                    totalBalanceMs += day.balanceMs;
+                }
+                // Adicionei esta lógica para dias passados sem registro em feriado não descontarem
+                else if (!lastPointOfDay && !isHoliday) {
+                     // Se não tem ponto e NÃO é feriado, desconta (falta) - Opcional, depende da sua regra
+                     // totalBalanceMs -= userTargetMs; 
+                }
+                // Se for feriado e não tiver ponto, não faz nada (Saldo 0), o que está correto.
+            });
 
-            // 4. Atualiza o estado com o saldo final e para o loading
-            setServerBalanceData({ totalBalanceMs: totalBalanceMs, loading: false });
-        };
+            setServerBalanceData({ totalBalanceMs: totalBalanceMs, loading: false });
+        };
 
-        fetchAndCalculateBalance().catch(err => {
-            console.error("Erro ao calcular saldo do servidor:", err);
-            setGlobalMessage({ type: 'error', title: 'Erro de Cálculo', message: 'Não foi possível calcular o saldo.' });
-            setServerBalanceData({ totalBalanceMs: 0, loading: false });
+            fetchAndCalculateBalance().catch(err => {
+                console.error("Erro ao calcular saldo do servidor:", err);
+                setGlobalMessage({ type: 'error', title: 'Erro de Cálculo', message: 'Não foi possível calcular o saldo.' });
+                setServerBalanceData({ totalBalanceMs: 0, loading: false });
         });
 
-    }, [viewingServerBalance, db, setGlobalMessage]); // Depende do servidor selecionado
+    }, [viewingServerBalance, db, setGlobalMessage, holidays]); // <-- ADICIONE 'holidays'
 // --- 👆 FIM DO NOVO useEffect 👆 ---
 
     const handleUpdatePointTime = async (newTime, observacao) => { 
@@ -2166,6 +2182,7 @@ const GestorDashboard = () => {
                          <button onClick={() => setActiveTab('solicitacoes')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'solicitacoes' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Mail className="w-4 h-4 mr-2" /> Solicitações</button>
                          <button onClick={() => setActiveTab('registros')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'registros' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Clock className="w-4 h-4 mr-2" /> Registros de Ponto</button>
                          <button onClick={() => setActiveTab('messages')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'messages' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><MessageSquare className="w-4 h-4 mr-2" /> Mensagem Global</button>
+                         <button onClick={() => setActiveTab('holidays')} className={`flex items-center py-3 px-4 text-sm font-medium rounded-t-lg transition-colors ${activeTab === 'holidays' ? 'text-blue-600 dark:text-blue-400 bg-slate-100 dark:bg-gray-800 border-b-2 border-blue-600' : 'text-slate-500 dark:text-slate-400 hover:bg-slate-100/50 dark:hover:bg-gray-800/50'}`}><Calendar className="w-4 h-4 mr-2" /> Feriados</button>   
                     </nav>
                 </div>
 
@@ -2450,6 +2467,11 @@ const GestorDashboard = () => {
                     <GlobalMessagesManager role="gestor" />
                 )}
 
+                {/* 👇 ADICIONE AQUI 👇 */}
+                {activeTab === 'holidays' && (
+                    <HolidayManagement />
+                )}    
+
                 <FileViewerModal isOpen={!!viewingFile} onClose={() => setViewingFile(null)} fileUrl={viewingFile?.url} fileName={viewingFile?.name} />
                 <GlobalMessagesViewerModal 
                     isOpen={isNotificationListOpen} 
@@ -2695,6 +2717,101 @@ const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading
         </div>
     );
 }
+
+// --- NOVO COMPONENTE: Gestão de Feriados ---
+const HolidayManagement = () => {
+    const { db, appId } = useAuthContext(); // Pegamos do contexto
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const [holidaysList, setHolidaysList] = useState([]);
+    const [newDate, setNewDate] = useState('');
+    const [description, setDescription] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    // Carrega a lista completa com descrições para exibir na tabela
+    useEffect(() => {
+        const q = query(collection(db, `artifacts/${appId}/public/data/feriados`), orderBy('date', 'desc'));
+        const unsub = onSnapshot(q, (snap) => {
+            setHolidaysList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
+        return () => unsub();
+    }, [db, appId]);
+
+    const handleAddHoliday = async (e) => {
+        e.preventDefault();
+        if (!newDate || !description) return;
+        setLoading(true);
+        try {
+            // Usamos a própria data como ID do documento para evitar duplicatas fáceis
+            await setDoc(doc(db, `artifacts/${appId}/public/data/feriados`, newDate), {
+                date: newDate,
+                description: description,
+                createdAt: new Date()
+            });
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado adicionado.' });
+            setNewDate('');
+            setDescription('');
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Erro', message: error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleDeleteHoliday = async (id) => {
+        if(!window.confirm('Remover este feriado?')) return;
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/feriados`, id));
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado removido.' });
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Erro', message: error.message });
+        }
+    };
+
+    return (
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+            <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-blue-600" /> Feriados e Pontos Facultativos
+            </h3>
+            
+            <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
+                <div className="flex-1 w-full">
+                    <label className="text-sm font-medium dark:text-slate-300">Data</label>
+                    <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                </div>
+                <div className="flex-[2] w-full">
+                    <label className="text-sm font-medium dark:text-slate-300">Descrição (Ex: Natal)</label>
+                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                </div>
+                <button type="submit" disabled={loading} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4 mr-1"/>} Adicionar
+                </button>
+            </form>
+
+            <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                <table className="min-w-full">
+                    <thead className="bg-slate-50 dark:bg-gray-800/50 sticky top-0">
+                        <tr>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Data</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Descrição</th>
+                            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                        {holidaysList.map(h => (
+                            <tr key={h.id}>
+                                <td className="px-4 py-2 text-sm dark:text-slate-200">{new Date(h.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                                <td className="px-4 py-2 text-sm dark:text-slate-200">{h.description}</td>
+                                <td className="px-4 py-2 text-right">
+                                    <button onClick={() => handleDeleteHoliday(h.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4"/></button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    );
+};
 
 const UnitManagement = () => {
     const { db } = useAuthContext();
