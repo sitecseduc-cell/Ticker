@@ -827,34 +827,6 @@ const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
 };
 // --- 👆 FIM DO NOVO COMPONENTE 👆 ---
 
-// --- NOVO: Modal de Saldo do Servidor ---
-const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
-    const { totalBalanceMs, loading } = balanceData;
-    if (!isOpen) return null;
-    return (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
-            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
-                <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Banco de Horas</h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
-                </div>
-                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">Saldo acumulado para: <span className="font-semibold">{serverName}</span></p>
-                <div className="text-center p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl">
-                    {loading ? (
-                        <div className="flex flex-col items-center justify-center h-24"><Loader2 className="w-8 h-8 text-blue-600 animate-spin" /><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Calculando saldo...</p></div>
-                    ) : (
-                        <div>
-                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Saldo Total Acumulado:</p>
-                            <p className={`text-5xl font-bold mt-2 ${totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{formatDuration(totalBalanceMs)}</p>
-                        </div>
-                    )}
-                </div>
-                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
-            </div>
-        </div>
-    );
-};
-
 // --- NOVO: Gestão de Feriados ---
 const HolidayManagement = () => {
     const { db, appId } = useAuthContext();
