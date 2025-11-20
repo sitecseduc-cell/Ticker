@@ -785,7 +785,7 @@ const AddPointModal = ({ isOpen, onClose, servidorNome, onSave, selectedDate }) 
 };
 // --- 👆 FIM DO NOVO COMPONENTE 👆 ---
 
-// --- 👇 COLE ESTE NOVO COMPONENTE DE MODAL AQUI 👇 ---
+// --- Componente: Modal de Saldo ---
 const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
     const { totalBalanceMs, loading } = balanceData;
 
@@ -825,9 +825,8 @@ const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
         </div>
     );
 };
-// --- 👆 FIM DO NOVO COMPONENTE 👆 ---
 
-// --- NOVO: Gestão de Feriados ---
+// --- Componente: Gestão de Feriados ---
 const HolidayManagement = () => {
     const { db, appId } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -838,7 +837,9 @@ const HolidayManagement = () => {
 
     useEffect(() => {
         const q = query(collection(db, `artifacts/${appId}/public/data/feriados`), orderBy('date', 'desc'));
-        const unsub = onSnapshot(q, (snap) => setHolidaysList(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        const unsub = onSnapshot(q, (snap) => {
+            setHolidaysList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        });
         return () => unsub();
     }, [db, appId]);
 
@@ -847,26 +848,73 @@ const HolidayManagement = () => {
         if (!newDate || !description) return;
         setLoading(true);
         try {
-            await setDoc(doc(db, `artifacts/${appId}/public/data/feriados`, newDate), { date: newDate, description, createdAt: new Date() });
+            await setDoc(doc(db, `artifacts/${appId}/public/data/feriados`, newDate), {
+                date: newDate,
+                description: description,
+                createdAt: new Date()
+            });
             setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado adicionado.' });
-            setNewDate(''); setDescription('');
-        } catch (error) { setGlobalMessage({ type: 'error', title: 'Erro', message: error.message }); } finally { setLoading(false); }
+            setNewDate('');
+            setDescription('');
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Erro', message: error.message });
+        } finally {
+            setLoading(false);
+        }
     };
 
     const handleDeleteHoliday = async (id) => {
         if(!window.confirm('Remover este feriado?')) return;
-        try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/feriados`, id)); setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado removido.' }); } catch (error) { setGlobalMessage({ type: 'error', title: 'Erro', message: error.message }); }
+        try {
+            await deleteDoc(doc(db, `artifacts/${appId}/public/data/feriados`, id));
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado removido.' });
+        } catch (error) {
+            setGlobalMessage({ type: 'error', title: 'Erro', message: error.message });
+        }
     };
 
     return (
         <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
-            <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center"><Calendar className="w-5 h-5 mr-2 text-blue-600" /> Feriados e Pontos Facultativos</h3>
+            <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center">
+                <Calendar className="w-5 h-5 mr-2 text-blue-600" /> Feriados e Pontos Facultativos
+            </h3>
+            
             <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
-                <div className="flex-1 w-full"><label className="text-sm font-medium dark:text-slate-300">Data</label><input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" /></div>
-                <div className="flex-[2] w-full"><label className="text-sm font-medium dark:text-slate-300">Descrição</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" /></div>
-                <button type="submit" disabled={loading} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4 mr-1"/>} Adicionar</button>
+                <div className="flex-1 w-full">
+                    <label className="text-sm font-medium dark:text-slate-300">Data</label>
+                    <input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                </div>
+                <div className="flex-[2] w-full">
+                    <label className="text-sm font-medium dark:text-slate-300">Descrição (Ex: Natal)</label>
+                    <input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" />
+                </div>
+                <button type="submit" disabled={loading} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">
+                    {loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4 mr-1"/>} Adicionar
+                </button>
             </form>
-            <div className="overflow-x-auto max-h-60 overflow-y-auto"><table className="min-w-full"><thead className="bg-slate-50 dark:bg-gray-800/50 sticky top-0"><tr><th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Data</th><th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Descrição</th><th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400">Ação</th></tr></thead><tbody className="divide-y divide-slate-200 dark:divide-gray-800">{holidaysList.map(h => (<tr key={h.id}><td className="px-4 py-2 text-sm dark:text-slate-200">{new Date(h.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td><td className="px-4 py-2 text-sm dark:text-slate-200">{h.description}</td><td className="px-4 py-2 text-right"><button onClick={() => handleDeleteHoliday(h.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4"/></button></td></tr>))}</tbody></table></div>
+
+            <div className="overflow-x-auto max-h-60 overflow-y-auto">
+                <table className="min-w-full">
+                    <thead className="bg-slate-50 dark:bg-gray-800/50 sticky top-0">
+                        <tr>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Data</th>
+                            <th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Descrição</th>
+                            <th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400">Ação</th>
+                        </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-200 dark:divide-gray-800">
+                        {holidaysList.map(h => (
+                            <tr key={h.id}>
+                                <td className="px-4 py-2 text-sm dark:text-slate-200">{new Date(h.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td>
+                                <td className="px-4 py-2 text-sm dark:text-slate-200">{h.description}</td>
+                                <td className="px-4 py-2 text-right">
+                                    <button onClick={() => handleDeleteHoliday(h.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4"/></button>
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
         </div>
     );
 };
