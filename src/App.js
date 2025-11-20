@@ -1198,10 +1198,12 @@ const ServidorDashboard = () => {
         }
     }, [globalMessages, lastReadTimestamp]);
 
-
+// Substitua todo o bloco 'const dailySummary = ...' por isto:
     const dailySummary = useMemo(() => {
         const summary = {};
         let totalBalanceMs = 0;
+        
+        // Agrupa os pontos por dia
         [...points].reverse().forEach(point => {
             const dateKey = formatDateOnly(point.timestamp);
             if (!summary[dateKey]) {
@@ -1210,47 +1212,56 @@ const ServidorDashboard = () => {
             summary[dateKey].points.push(point);
         });
 
+        // Calcula o tempo para cada dia
         Object.keys(summary).sort().forEach(dateKey => {
             const day = summary[dateKey];
             let totalWorkedMs = 0;
             let currentSegmentStart = null;
+            
             day.points.forEach(p => {
                 const type = p.tipo;
                 const timestamp = p.timestamp.toDate().getTime();
-                if (type === 'entrada' || type === 'volta') {
+
+                // --- LÓGICA JORNADA CONTÍNUA (Pausa conta como trabalho) ---
+                if (type === 'entrada') {
+                    // O relógio começa a contar na entrada
                     if(currentSegmentStart === null) currentSegmentStart = timestamp;
-                } else if ((type === 'saida' || type === 'pausa') && currentSegmentStart !== null) {
+                } 
+                else if (type === 'saida' && currentSegmentStart !== null) {
+                    // O relógio só para na saída. Pausa e Volta são ignorados pelo contador.
                     totalWorkedMs += (timestamp - currentSegmentStart);
                     currentSegmentStart = null;
                 }
             });
 
-            // Considera o dia atual como "em andamento" se não houver 'saida'
-            if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
-                totalWorkedMs += (new Date().getTime() - currentSegmentStart);
+            // Se o dia é HOJE e ainda não saiu, calcula o tempo até AGORA (tempo real)
+            if (currentSegmentStart !== null && dateKey === formatDateOnly(now)) {
+                totalWorkedMs += (now.getTime() - currentSegmentStart);
             }
 
             day.totalMs = totalWorkedMs;
 
-           // --- INÍCIO DA CORREÇÃO ---
-            const lastPointOfDay = day.points[day.points.length - 1];
-            const userTargetMs = getTargetHoursMs(user.role); // <-- SUA LÓGICA DE 4/8 HORAS
+            // Calcula o saldo (Positivo ou Negativo)
+            const lastPointOfDay = day.points[day.points.length - 1];
+            const userTargetMs = getTargetHoursMs(user.role);
 
-            if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                 day.balanceMs = totalWorkedMs - userTargetMs; // <-- USANDO A META CORRETA
-            } else {
-                 day.balanceMs = 0; // Não conta saldo para dias não finalizados
-            }
-            // --- FIM DA CORREÇÃO ---
+            // Se bateu saída OU se é hoje (saldo parcial), calcula o saldo
+            if ((lastPointOfDay && lastPointOfDay.tipo === 'saida') || dateKey === formatDateOnly(now)) {
+                 day.balanceMs = totalWorkedMs - userTargetMs;
+            } else {
+                 // Dias passados sem saída ficam com saldo negativo total
+                 day.balanceMs = totalWorkedMs - userTargetMs;
+            }
+            
+            // Só soma ao saldo total se o dia estiver fechado ou for hoje
+            if (day.balanceMs !== 0) {
+                totalBalanceMs += day.balanceMs;
+            }
+        });
+        return { summary, totalBalanceMs };
+    }, [points, user.role, now]); // 'now' garante atualização em tempo real
 
-           // Apenas adiciona ao saldo total se o dia foi finalizado
-            if (day.balanceMs !== 0) {
-                totalBalanceMs += day.balanceMs;
-            }
-        });
-        return { summary, totalBalanceMs };
-    }, [points, user.role, now]); // <-- MUDE AQUI
-
+  // Substitua todo o bloco 'const selectedDayData = ...' por isto:
     const selectedDayData = useMemo(() => {
         const dateObj = new Date(viewDate);
         dateObj.setMinutes(dateObj.getMinutes() + dateObj.getTimezoneOffset());
@@ -1258,49 +1269,43 @@ const ServidorDashboard = () => {
 
         const day = dailySummary.summary[dateKey] || { points: [], totalMs: 0, balanceMs: 0 };
 
-        // Recalcula o saldo do dia selecionado (especialmente para 'hoje' em andamento)
         let totalWorkedMs = 0;
         let currentSegmentStart = null;
+
+        // Recalcula o dia selecionado com a mesma lógica contínua
         day.points.forEach(p => {
             const type = p.tipo;
             const timestamp = p.timestamp.toDate().getTime();
-            if (type === 'entrada' || type === 'volta') {
+            
+            // Lógica Contínua
+            if (type === 'entrada') {
                 if(currentSegmentStart === null) currentSegmentStart = timestamp;
-            } else if ((type === 'saida' || type === 'pausa') && currentSegmentStart !== null) {
+            } else if (type === 'saida' && currentSegmentStart !== null) {
                 totalWorkedMs += (timestamp - currentSegmentStart);
                 currentSegmentStart = null;
             }
         });
 
-        // Se for hoje e ainda estiver trabalhando
-        if (currentSegmentStart !== null && dateKey === formatDateOnly(new Date())) {
-            totalWorkedMs += (new Date().getTime() - currentSegmentStart);
+        // Tempo real se for hoje
+        if (currentSegmentStart !== null && dateKey === formatDateOnly(now)) {
+            totalWorkedMs += (now.getTime() - currentSegmentStart);
         }
 
         day.totalMs = totalWorkedMs;
 
-        // --- INÍCIO DA CORREÇÃO ---
+        const lastPointOfDay = day.points[day.points.length - 1];
+        const userTargetMs = getTargetHoursMs(user.role);
 
-        // Esta linha estava faltando no seu código e causou o erro:
-        const lastPointOfDay = day.points[day.points.length - 1]; 
-
-        // Esta é a sua nova lógica de 4/8 horas:
-        const userTargetMs = getTargetHoursMs(user.role); 
-
-        if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-            day.balanceMs = totalWorkedMs - userTargetMs;
-        } else if (dateKey === formatDateOnly(now)) { // <-- MUDANÇA 3
-            // Se for hoje e não estiver finalizado, o saldo é 0
-            day.balanceMs = 0; 
-        } else {
-            // Se for um dia passado não finalizado, o saldo é negativo
-            day.balanceMs = totalWorkedMs - userTargetMs;
-        }
-        // --- FIM DA CORREÇÃO ---
-
+        if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+            day.balanceMs = totalWorkedMs - userTargetMs;
+        } else if (dateKey === formatDateOnly(now)) {
+            day.balanceMs = totalWorkedMs - userTargetMs; // Mostra saldo parcial em tempo real
+        } else {
+            day.balanceMs = totalWorkedMs - userTargetMs;
+        }
 
         return day;
-        }, [dailySummary.summary, viewDate, user.role]); // <-- ADICIONADO user.role
+    }, [dailySummary.summary, viewDate, user.role, now]);
 
     const isShiftFinishedToday = useMemo(() => {
         if (!lastPoint || lastPoint.tipo !== 'saida') return false;
@@ -1822,16 +1827,20 @@ const GestorDashboard = () => {
                 let totalWorkedMs = 0;
                 let currentSegmentStart = null;
                 
-                day.points.forEach(p => {
-                    const type = p.tipo;
-                    const timestamp = p.timestamp.toDate().getTime();
-                    if (type === 'entrada' || type === 'volta') {
-                        if(currentSegmentStart === null) currentSegmentStart = timestamp;
-                    } else if ((type === 'saida' || type === 'pausa') && currentSegmentStart !== null) {
-                        totalWorkedMs += (timestamp - currentSegmentStart);
-                        currentSegmentStart = null;
-                    }
-                });
+               day.points.forEach(p => {
+                const type = p.tipo;
+                const timestamp = p.timestamp.toDate().getTime();
+                
+                // Lógica JORNADA CONTÍNUA
+                if (type === 'entrada') {
+                    if(currentSegmentStart === null) currentSegmentStart = timestamp;
+                    } 
+                // Ignora 'pausa' e 'volta'. Só para na 'saida'.
+                else if (type === 'saida' && currentSegmentStart !== null) {
+                    totalWorkedMs += (timestamp - currentSegmentStart);
+                    currentSegmentStart = null;
+                    }
+                });
 
                 // Pega a meta de horas do servidor (estagiário ou não)
                 const userTargetMs = getTargetHoursMs(serverRole);
