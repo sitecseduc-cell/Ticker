@@ -1244,7 +1244,7 @@ const ServidorDashboard = () => {
         const summary = {};
         let totalBalanceMs = 0;
         
-        // Agrupa os pontos por dia
+        // 1. Agrupa os pontos por dia
         [...points].reverse().forEach(point => {
             const dateKey = formatDateOnly(point.timestamp);
             if (!summary[dateKey]) {
@@ -1253,7 +1253,7 @@ const ServidorDashboard = () => {
             summary[dateKey].points.push(point);
         });
 
-        // Calcula o tempo para cada dia
+        // 2. Calcula o tempo para cada dia
         Object.keys(summary).sort().forEach(dateKey => {
             const day = summary[dateKey];
             let totalWorkedMs = 0;
@@ -1263,51 +1263,41 @@ const ServidorDashboard = () => {
                 const type = p.tipo;
                 const timestamp = p.timestamp.toDate().getTime();
 
-                // --- LÓGICA JORNADA CONTÍNUA (Pausa conta como trabalho) ---
+                // Lógica Jornada Contínua
                 if (type === 'entrada') {
-                    // O relógio começa a contar na entrada
                     if(currentSegmentStart === null) currentSegmentStart = timestamp;
-                } 
-                else if (type === 'saida' && currentSegmentStart !== null) {
-                    // O relógio só para na saída. Pausa e Volta são ignorados pelo contador.
+                } else if (type === 'saida' && currentSegmentStart !== null) {
                     totalWorkedMs += (timestamp - currentSegmentStart);
                     currentSegmentStart = null;
                 }
             });
 
-            // Se o dia é HOJE e ainda não saiu, calcula o tempo até AGORA (tempo real)
+            // Tempo real se for hoje
             if (currentSegmentStart !== null && dateKey === formatDateOnly(now)) {
                 totalWorkedMs += (now.getTime() - currentSegmentStart);
             }
 
             day.totalMs = totalWorkedMs;
 
-            // --- 👇 LÓGICA DE FERIADO AQUI 👇 ---
-            const isHoliday = holidays.includes(dateKey); // Verifica se a data está na lista de feriados
-            
-            // Se for feriado, a meta é 0. Se não, é a meta normal (4h ou 8h).
-            const userTargetMs = isHoliday ? 0 : getTargetHoursMs(user.role); 
-            // --- 👆 FIM DA LÓGICA 👆 ---
+            // --- LÓGICA DE FERIADO E META (DEFINIDA UMA ÚNICA VEZ) ---
+            const isHoliday = holidays.includes(dateKey);
+            // ---------------------------------------------------------
 
-            // Calcula o saldo (Positivo ou Negativo)
             const lastPointOfDay = day.points[day.points.length - 1];
-            const userTargetMs = getTargetHoursMs(user.role);
 
-            // Se bateu saída OU se é hoje (saldo parcial), calcula o saldo
+            // Calcula saldo
             if ((lastPointOfDay && lastPointOfDay.tipo === 'saida') || dateKey === formatDateOnly(now)) {
                  day.balanceMs = totalWorkedMs - userTargetMs;
             } else {
-                 // Dias passados sem saída ficam com saldo negativo total
                  day.balanceMs = totalWorkedMs - userTargetMs;
             }
             
-            // Só soma ao saldo total se o dia estiver fechado ou for hoje
             if (day.balanceMs !== 0) {
                 totalBalanceMs += day.balanceMs;
             }
         });
         return { summary, totalBalanceMs };
-    }, [points, user.role, now, holidays]); // <-- ADICIONE 'holidays' AQUI
+    }, [points, user.role, now, holidays]);
 
   // Substitua todo o bloco 'const selectedDayData = ...' por isto:
    const selectedDayData = useMemo(() => {
@@ -1345,7 +1335,6 @@ const ServidorDashboard = () => {
         
         // --- CORREÇÃO: Define a variável APENAS UMA VEZ ---
         const isHoliday = holidays.includes(dateKey);
-        const userTargetMs = isHoliday ? 0 : getTargetHoursMs(user.role);
         // --------------------------------------------------
 
         if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
