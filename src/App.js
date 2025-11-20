@@ -2740,45 +2740,6 @@ const UnitManagementModal = ({ isOpen, onClose, onSave, unit, setUnit, isLoading
     );
 }
 
-// --- NOVO COMPONENTE: Gestão de Feriados ---
-const HolidayManagement = () => {
-    const { db, appId } = useAuthContext(); // Pegamos do contexto
-    const { setMessage: setGlobalMessage } = useGlobalMessage();
-    const [holidaysList, setHolidaysList] = useState([]);
-    const [newDate, setNewDate] = useState('');
-    const [description, setDescription] = useState('');
-    const [loading, setLoading] = useState(false);
-
-    // Carrega a lista completa com descrições para exibir na tabela
-    useEffect(() => {
-        const q = query(collection(db, `artifacts/${appId}/public/data/feriados`), orderBy('date', 'desc'));
-        const unsub = onSnapshot(q, (snap) => {
-            setHolidaysList(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-        });
-        return () => unsub();
-    }, [db, appId]);
-
-    const handleAddHoliday = async (e) => {
-        e.preventDefault();
-        if (!newDate || !description) return;
-        setLoading(true);
-        try {
-            // Usamos a própria data como ID do documento para evitar duplicatas fáceis
-            await setDoc(doc(db, `artifacts/${appId}/public/data/feriados`, newDate), {
-                date: newDate,
-                description: description,
-                createdAt: new Date()
-            });
-            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado adicionado.' });
-            setNewDate('');
-            setDescription('');
-        } catch (error) {
-            setGlobalMessage({ type: 'error', title: 'Erro', message: error.message });
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const handleDeleteHoliday = async (id) => {
         if(!window.confirm('Remover este feriado?')) return;
         try {
