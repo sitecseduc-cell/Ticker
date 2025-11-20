@@ -145,6 +145,7 @@ const AuthProvider = ({ children }) => {
     const [unidades, setUnidades] = useState({});
     const [globalMessages, setGlobalMessages] = useState([]);
     const [allUsers, setAllUsers] = useState([]); 
+    const [holidays, setHolidays] = useState([]); // NOVO ESTADO
 
    // --- 👇 2. ADICIONE ESTE NOVO useEffect AQUI 👇 ---
     // Carregar Feriados
@@ -289,6 +290,7 @@ const AuthProvider = ({ children }) => {
         unidades,
         globalMessages,
         allUsers,
+        holidays,
         handleLogin,
         handleLogout,
         handleSignUp,
@@ -296,7 +298,7 @@ const AuthProvider = ({ children }) => {
         db,
         auth,
         storage 
-    }), [user, isLoading, unidades, globalMessages, allUsers, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
+    }), [user, isLoading, unidades, globalMessages, allUsers, holidays, handleLogin, handleLogout, handleSignUp, handleForgotPassword]);
 
     return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
 };
@@ -824,6 +826,78 @@ const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
     );
 };
 // --- 👆 FIM DO NOVO COMPONENTE 👆 ---
+
+// --- NOVO: Modal de Saldo do Servidor ---
+const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
+    const { totalBalanceMs, loading } = balanceData;
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-md p-6 animate-in zoom-in-95">
+                <div className="flex justify-between items-center mb-4">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100">Banco de Horas</h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:text-slate-500 dark:hover:text-slate-300"><X className="w-6 h-6" /></button>
+                </div>
+                <p className="text-sm text-slate-600 dark:text-slate-300 mb-4">Saldo acumulado para: <span className="font-semibold">{serverName}</span></p>
+                <div className="text-center p-6 bg-slate-50 dark:bg-gray-800/50 rounded-xl">
+                    {loading ? (
+                        <div className="flex flex-col items-center justify-center h-24"><Loader2 className="w-8 h-8 text-blue-600 animate-spin" /><p className="mt-2 text-sm text-slate-500 dark:text-slate-400">Calculando saldo...</p></div>
+                    ) : (
+                        <div>
+                            <p className="text-sm font-medium text-slate-500 dark:text-slate-400">Saldo Total Acumulado:</p>
+                            <p className={`text-5xl font-bold mt-2 ${totalBalanceMs >= 0 ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>{formatDuration(totalBalanceMs)}</p>
+                        </div>
+                    )}
+                </div>
+                <button onClick={onClose} className="mt-6 w-full py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition">Fechar</button>
+            </div>
+        </div>
+    );
+};
+
+// --- NOVO: Gestão de Feriados ---
+const HolidayManagement = () => {
+    const { db, appId } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const [holidaysList, setHolidaysList] = useState([]);
+    const [newDate, setNewDate] = useState('');
+    const [description, setDescription] = useState('');
+    const [loading, setLoading] = useState(false);
+
+    useEffect(() => {
+        const q = query(collection(db, `artifacts/${appId}/public/data/feriados`), orderBy('date', 'desc'));
+        const unsub = onSnapshot(q, (snap) => setHolidaysList(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+        return () => unsub();
+    }, [db, appId]);
+
+    const handleAddHoliday = async (e) => {
+        e.preventDefault();
+        if (!newDate || !description) return;
+        setLoading(true);
+        try {
+            await setDoc(doc(db, `artifacts/${appId}/public/data/feriados`, newDate), { date: newDate, description, createdAt: new Date() });
+            setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado adicionado.' });
+            setNewDate(''); setDescription('');
+        } catch (error) { setGlobalMessage({ type: 'error', title: 'Erro', message: error.message }); } finally { setLoading(false); }
+    };
+
+    const handleDeleteHoliday = async (id) => {
+        if(!window.confirm('Remover este feriado?')) return;
+        try { await deleteDoc(doc(db, `artifacts/${appId}/public/data/feriados`, id)); setGlobalMessage({ type: 'success', title: 'Sucesso', message: 'Feriado removido.' }); } catch (error) { setGlobalMessage({ type: 'error', title: 'Erro', message: error.message }); }
+    };
+
+    return (
+        <div className="bg-white dark:bg-gray-900 p-6 rounded-2xl shadow-sm border border-slate-200 dark:border-gray-800">
+            <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-100 flex items-center"><Calendar className="w-5 h-5 mr-2 text-blue-600" /> Feriados e Pontos Facultativos</h3>
+            <form onSubmit={handleAddHoliday} className="flex flex-col sm:flex-row gap-4 mb-6 items-end">
+                <div className="flex-1 w-full"><label className="text-sm font-medium dark:text-slate-300">Data</label><input type="date" value={newDate} onChange={e => setNewDate(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" /></div>
+                <div className="flex-[2] w-full"><label className="text-sm font-medium dark:text-slate-300">Descrição</label><input type="text" value={description} onChange={e => setDescription(e.target.value)} required className="w-full p-2 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" /></div>
+                <button type="submit" disabled={loading} className="w-full sm:w-auto px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 flex items-center justify-center">{loading ? <Loader2 className="w-4 h-4 animate-spin"/> : <Plus className="w-4 h-4 mr-1"/>} Adicionar</button>
+            </form>
+            <div className="overflow-x-auto max-h-60 overflow-y-auto"><table className="min-w-full"><thead className="bg-slate-50 dark:bg-gray-800/50 sticky top-0"><tr><th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Data</th><th className="px-4 py-2 text-left text-xs font-semibold text-slate-500 dark:text-slate-400">Descrição</th><th className="px-4 py-2 text-right text-xs font-semibold text-slate-500 dark:text-slate-400">Ação</th></tr></thead><tbody className="divide-y divide-slate-200 dark:divide-gray-800">{holidaysList.map(h => (<tr key={h.id}><td className="px-4 py-2 text-sm dark:text-slate-200">{new Date(h.date).toLocaleDateString('pt-BR', {timeZone: 'UTC'})}</td><td className="px-4 py-2 text-sm dark:text-slate-200">{h.description}</td><td className="px-4 py-2 text-right"><button onClick={() => handleDeleteHoliday(h.id)} className="text-red-600 hover:text-red-800"><Trash2 className="w-4 h-4"/></button></td></tr>))}</tbody></table></div>
+        </div>
+    );
+};
 
 
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
@@ -1796,90 +1870,72 @@ const GestorDashboard = () => {
     }, [db, selectedDate, servidoresDaUnidade, setGlobalMessage]);
 
 
-    // --- 👇 ADICIONE ESTE NOVO useEffect PARA CALCULAR O SALDO TOTAL 👇 ---
-    useEffect(() => {
-        // Se nenhum servidor foi selecionado, não faz nada
-        if (!viewingServerBalance) {
-            return;
-        }
+   // --- 👇 INICIO DO NOVO BLOCO (Cálculo de Saldo Total) 👇 ---
+    useEffect(() => {
+        // Se o gestor não clicou em "Ver Saldo Total", não faz nada
+        if (!viewingServerBalance) return;
 
-        const fetchAndCalculateBalance = async () => {
-            // 1. Mostra o spinner no modal
-            setServerBalanceData({ totalBalanceMs: 0, loading: true });
+        const fetchBalance = async () => {
+            setServerBalanceData({ totalBalanceMs: 0, loading: true });
+            const serverId = viewingServerBalance.id;
+            const serverRole = viewingServerBalance.role;
+            
+            // Busca TODOS os pontos do histórico desse servidor
+            const q = query(collection(db, `artifacts/${appId}/users/${serverId}/registros_ponto`), orderBy('timestamp', 'asc'));
+            const snap = await getDocs(q);
+            const allPoints = snap.docs.map(d => d.data());
 
-            const serverId = viewingServerBalance.id;
-            const serverRole = viewingServerBalance.role;
-            const pointCollectionPath = `artifacts/${appId}/users/${serverId}/registros_ponto`;
-            
-            // 2. Busca TODOS os pontos deste servidor
-            const qPoints = query(collection(db, pointCollectionPath), orderBy('timestamp', 'asc')); // ASC para facilitar o cálculo
-            const pointsSnapshot = await getDocs(qPoints);
-            const allPoints = pointsSnapshot.docs.map(doc => doc.data());
+            const summary = {};
+            let totalBalanceMs = 0;
 
-            // 3. Lógica de cálculo (IDÊNTICA ao ServidorDashboard)
-            const summary = {};
-            let totalBalanceMs = 0;
-
-            allPoints.forEach(point => {
-                const dateKey = formatDateOnly(point.timestamp);
-                if (!summary[dateKey]) {
-                    summary[dateKey] = { points: [], totalMs: 0, balanceMs: 0 };
-                }
-                summary[dateKey].points.push(point);
-            });
-
-            Object.keys(summary).sort().forEach(dateKey => {
-                const day = summary[dateKey];
-                let totalWorkedMs = 0;
-                let currentSegmentStart = null;
-                
-               day.points.forEach(p => {
-                const type = p.tipo;
-                const timestamp = p.timestamp.toDate().getTime();
-                
-                // Lógica JORNADA CONTÍNUA
-                if (type === 'entrada') {
-                    if(currentSegmentStart === null) currentSegmentStart = timestamp;
-                    } 
-                // Ignora 'pausa' e 'volta'. Só para na 'saida'.
-                else if (type === 'saida' && currentSegmentStart !== null) {
-                    totalWorkedMs += (timestamp - currentSegmentStart);
-                    currentSegmentStart = null;
-                    }
-                });
-                
-                // --- 👇 LÓGICA DE FERIADO AQUI 👇 ---
-                const isHoliday = holidays.includes(dateKey);
-                const userTargetMs = isHoliday ? 0 : getTargetHoursMs(serverRole);
-                // --- 👆 ---
-                
-                // Pega a meta de horas do servidor (estagiário ou não)
-                const userTargetMs = getTargetHoursMs(serverRole);
-                const lastPointOfDay = day.points[day.points.length - 1];
-
-               if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
-                    day.balanceMs = totalWorkedMs - userTargetMs;
-                    totalBalanceMs += day.balanceMs;
-                }
-                // Adicionei esta lógica para dias passados sem registro em feriado não descontarem
-                else if (!lastPointOfDay && !isHoliday) {
-                     // Se não tem ponto e NÃO é feriado, desconta (falta) - Opcional, depende da sua regra
-                     // totalBalanceMs -= userTargetMs; 
-                }
-                // Se for feriado e não tiver ponto, não faz nada (Saldo 0), o que está correto.
+            // 1. Agrupa tudo por dia
+            allPoints.forEach(point => {
+                const dateKey = formatDateOnly(point.timestamp);
+                if (!summary[dateKey]) summary[dateKey] = { points: [] };
+                summary[dateKey].points.push(point);
             });
 
-            setServerBalanceData({ totalBalanceMs: totalBalanceMs, loading: false });
+            // 2. Calcula dia a dia
+            Object.keys(summary).sort().forEach(dateKey => {
+                const day = summary[dateKey];
+                let totalWorkedMs = 0;
+                let currentSegmentStart = null;
+                
+                day.points.forEach(p => {
+                    const type = p.tipo;
+                    const timestamp = p.timestamp.toDate().getTime();
+                    
+                    // Lógica de Jornada Contínua (igual ao painel do servidor)
+                    if (type === 'entrada') {
+                        if(currentSegmentStart === null) currentSegmentStart = timestamp;
+                    } else if (type === 'saida' && currentSegmentStart !== null) {
+                        totalWorkedMs += (timestamp - currentSegmentStart);
+                        currentSegmentStart = null;
+                    }
+                });
+
+                // Lógica de Feriado
+                const isHoliday = holidays.includes(dateKey);
+                const userTargetMs = isHoliday ? 0 : getTargetHoursMs(serverRole);
+                
+                const lastPointOfDay = day.points[day.points.length - 1];
+                
+                // Só soma ou subtrai saldo se o dia foi encerrado (tem saída)
+                if (lastPointOfDay && lastPointOfDay.tipo === 'saida') {
+                    totalBalanceMs += (totalWorkedMs - userTargetMs);
+                }
+                // Se não tem saída (ex: faltou), desconta o dia (a menos que seja feriado)
+                else if (!isHoliday && day.points.length === 0) {
+                     // Opcional: Descomente abaixo se quiser descontar faltas totais automaticamente
+                     // totalBalanceMs -= userTargetMs;
+                }
+            });
+
+            setServerBalanceData({ totalBalanceMs, loading: false });
         };
-
-            fetchAndCalculateBalance().catch(err => {
-                console.error("Erro ao calcular saldo do servidor:", err);
-                setGlobalMessage({ type: 'error', title: 'Erro de Cálculo', message: 'Não foi possível calcular o saldo.' });
-                setServerBalanceData({ totalBalanceMs: 0, loading: false });
-        });
-
-    }, [viewingServerBalance, db, setGlobalMessage, holidays]); // <-- ADICIONE 'holidays'
-// --- 👆 FIM DO NOVO useEffect 👆 ---
+        fetchBalance();
+    }, [viewingServerBalance, db, holidays]);
+    // --- 👆 FIM DO NOVO BLOCO 👆 ---
 
     const handleUpdatePointTime = async (newTime, observacao) => { 
             if (!editingPoint) return;
@@ -2369,22 +2425,20 @@ const GestorDashboard = () => {
                                             - gap-3: Adiciona um espaço entre os itens.
                                         */}
                                         <div className="flex flex-wrap justify-between items-center gap-3">
-                                            {/* Item 1: O Nome */}
                                             <h3 className="text-lg font-semibold text-slate-700 dark:text-slate-200">
                                                 {servidor.nome}
                                             </h3>
                                             
-                                            {/* Item 2: Div dos Botões 
-                                                - flex-shrink-0: Impede que os botões encolham ou quebrem linha, mantendo-os sempre juntos.
-                                            */}
                                             <div className="flex items-center space-x-2 flex-shrink-0">
+                                                {/* Botão Ver Saldo */}
                                                 <button
                                                     onClick={() => setViewingServerBalance(servidor)}
                                                     className="flex items-center text-xs font-medium bg-blue-600 text-white py-1 px-3 rounded-lg hover:bg-blue-700 shadow-sm transition"
                                                 >
                                                     <Clock className="w-4 h-4 mr-1" /> Ver Saldo Total
                                                 </button>
-
+                                    
+                                                {/* Botão Adicionar */}
                                                 <button
                                                     onClick={() => setAddingPointForUser({ id: servidor.id, nome: servidor.nome, unidadeId: servidor.unidadeId })}
                                                     className="flex items-center text-xs font-medium bg-emerald-600 text-white py-1 px-3 rounded-lg hover:bg-emerald-700 shadow-sm transition"
@@ -2507,6 +2561,7 @@ const GestorDashboard = () => {
                     onCancel={() => setPointToDelete(null)}
                     isLoading={isDeleting}
                 />
+                        
                 {/* --- 👇 ADICIONE O NOVO MODAL DE SALDO AQUI 👇 --- */}
                 <ServerBalanceModal
                     isOpen={!!viewingServerBalance}
@@ -2515,6 +2570,13 @@ const GestorDashboard = () => {
                     balanceData={serverBalanceData}
                 />
                 {/* --- 👆 FIM DA ADIÇÃO 👆 --- */}
+
+                {/* Renderiza a tela de Feriados se a aba for selecionada */}
+                {activeTab === 'holidays' && (
+                    <div className="mt-8">
+                        <HolidayManagement />
+                    </div>
+                )}
 
                 {/* --- 👇 ADICIONE O NOVO MODAL DE EXCLUSÃO DE SOLICITAÇÃO AQUI 👇 --- */}
                 <ConfirmationModal
