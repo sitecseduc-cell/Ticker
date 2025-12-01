@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo, createContext, useContext } from 'react';
 import { initializeApp } from 'firebase/app';
-import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { getAuth, onAuthStateChanged, signOut, signInWithEmailAndPassword, createUserWithEmailAndPassword, sendPasswordResetEmail, updateProfile, updateEmail, updatePassword } from 'firebase/auth';
 import {
     getFirestore, doc, collection, query, where, orderBy, onSnapshot,
     addDoc, getDoc, updateDoc, deleteDoc, getDocs, setDoc, Timestamp // <-- Timestamp importado
@@ -10,14 +10,14 @@ import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell, Eye, BellRing, Edit3, Wrench // <-- Ícone de Edição adicionado
+    Calendar, Bell, Eye, BellRing, Edit3, Wrench, Camera, Lock, Settings, UserCircle // <-- Ícone de Edição adicionado
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
 
 //________________________________
-const SITE_EM_MANUTENCAO = true;//|  PARA ATIVAR O MODO MANUTENÇÃO DO TICKER, VIRE A CHAVE PARA "TRUE". PARA DESATIVAR "FALSE"
+const SITE_EM_MANUTENCAO = false;//|  PARA ATIVAR O MODO MANUTENÇÃO DO TICKER, VIRE A CHAVE PARA "TRUE". PARA DESATIVAR "FALSE"
 //________________________________|
 
 
@@ -860,6 +860,191 @@ const MaintenanceScreen = () => {
 };
 
 
+// --- NOVO COMPONENTE: Modal de Perfil ---
+const ProfileModal = ({ isOpen, onClose }) => {
+    const { user, db, auth, storage, handleLogout } = useAuthContext();
+    const { setMessage: setGlobalMessage } = useGlobalMessage();
+    const [activeTab, setActiveTab] = useState('personal'); // 'personal' or 'security'
+    const [loading, setLoading] = useState(false);
+
+    // Estados do Formulário
+    const [name, setName] = useState(user?.nome || '');
+    const [matricula, setMatricula] = useState(user?.matricula || '');
+    const [email, setEmail] = useState(user?.email || '');
+    const [newPassword, setNewPassword] = useState('');
+    const [photoFile, setPhotoFile] = useState(null);
+    const [photoPreview, setPhotoPreview] = useState(user?.photoURL || null);
+
+    // Atualiza estados quando o modal abre
+    useEffect(() => {
+        if (isOpen && user) {
+            setName(user.nome);
+            setMatricula(user.matricula);
+            setEmail(user.email);
+            setPhotoPreview(user.photoURL);
+            setNewPassword('');
+            setPhotoFile(null);
+        }
+    }, [isOpen, user]);
+
+    if (!isOpen || !user) return null;
+
+    const handleFileChange = (e) => {
+        const file = e.target.files[0];
+        if (file) {
+            setPhotoFile(file);
+            setPhotoPreview(URL.createObjectURL(file));
+        }
+    };
+
+    const handleSavePersonal = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        try {
+            let photoURL = user.photoURL;
+
+            // 1. Upload da Foto (se houver)
+            if (photoFile) {
+                const storageRef = ref(storage, `profile_photos/${user.uid}`);
+                const snapshot = await uploadBytes(storageRef, photoFile);
+                photoURL = await getDownloadURL(snapshot.ref);
+            }
+
+            // 2. Atualizar Auth (Nome e Foto)
+            if (auth.currentUser) {
+                await updateProfile(auth.currentUser, { displayName: name, photoURL: photoURL });
+            }
+
+            // 3. Atualizar Firestore
+            const userDocRef = doc(db, 'artifacts', 'secretaria-educacao-ponto-demo', 'public', 'data', 'users', user.uid);
+            await updateDoc(userDocRef, {
+                nome: name,
+                matricula: matricula,
+                photoURL: photoURL
+            });
+
+            setGlobalMessage({ type: 'success', title: 'Perfil Atualizado', message: 'Seus dados foram salvos.' });
+            // Força um reload suave ou aguarda o contexto atualizar
+        } catch (error) {
+            console.error(error);
+            setGlobalMessage({ type: 'error', title: 'Erro', message: 'Falha ao atualizar perfil. ' + error.message });
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    const handleSaveSecurity = async (e) => {
+        e.preventDefault();
+        setLoading(true);
+        const currentUser = auth.currentUser;
+        try {
+            // Atualizar Email
+            if (email !== user.email) {
+                await updateEmail(currentUser, email);
+                // Também atualiza no Firestore
+                const userDocRef = doc(db, 'artifacts', 'secretaria-educacao-ponto-demo', 'public', 'data', 'users', user.uid);
+                await updateDoc(userDocRef, { email: email });
+            }
+
+            // Atualizar Senha
+            if (newPassword) {
+                await updatePassword(currentUser, newPassword);
+            }
+
+            setGlobalMessage({ type: 'success', title: 'Segurança Atualizada', message: 'Dados de acesso alterados. Faça login novamente.' });
+            onClose();
+            handleLogout(); // Força logout por segurança
+        } catch (error) {
+            console.error(error);
+            if (error.code === 'auth/requires-recent-login') {
+                setGlobalMessage({ type: 'warning', title: 'Login Necessário', message: 'Para mudar senha ou email, faça logout e entre novamente.' });
+            } else {
+                setGlobalMessage({ type: 'error', title: 'Erro', message: error.message });
+            }
+        } finally {
+            setLoading(false);
+        }
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4 animate-in fade-in">
+            <div className="bg-white dark:bg-gray-900 rounded-xl shadow-2xl w-full max-w-lg flex flex-col max-h-[90vh]">
+                <div className="p-6 border-b dark:border-gray-800 flex justify-between items-center">
+                    <h3 className="text-xl font-bold text-slate-800 dark:text-slate-100 flex items-center">
+                        <Settings className="w-6 h-6 mr-2 text-blue-600" /> Meu Perfil
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 dark:hover:text-slate-200"><X /></button>
+                </div>
+
+                <div className="flex border-b dark:border-gray-800">
+                    <button onClick={() => setActiveTab('personal')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'personal' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Dados Pessoais</button>
+                    <button onClick={() => setActiveTab('security')} className={`flex-1 py-3 text-sm font-medium ${activeTab === 'security' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-slate-500'}`}>Segurança</button>
+                </div>
+
+                <div className="p-6 overflow-y-auto">
+                    {activeTab === 'personal' ? (
+                        <form onSubmit={handleSavePersonal} className="space-y-6">
+                            {/* Upload de Foto */}
+                            <div className="flex flex-col items-center">
+                                <div className="relative">
+                                    {photoPreview ? (
+                                        <img src={photoPreview} alt="Perfil" className="w-24 h-24 rounded-full object-cover border-4 border-slate-100 dark:border-gray-800 shadow-lg" />
+                                    ) : (
+                                        <div className="w-24 h-24 rounded-full bg-slate-200 dark:bg-gray-800 flex items-center justify-center border-4 border-slate-100 dark:border-gray-700">
+                                            <UserCircle className="w-12 h-12 text-slate-400" />
+                                        </div>
+                                    )}
+                                    <label className="absolute bottom-0 right-0 p-2 bg-blue-600 rounded-full text-white cursor-pointer hover:bg-blue-700 transition shadow-md">
+                                        <Camera className="w-4 h-4" />
+                                        <input type="file" className="hidden" accept="image/*" onChange={handleFileChange} />
+                                    </label>
+                                </div>
+                                <p className="text-xs text-slate-500 mt-2">Clique na câmera para alterar</p>
+                            </div>
+
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Nome Completo</label>
+                                <input type="text" value={name} onChange={e => setName(e.target.value)} className="w-full p-3 mt-1 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" required />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Matrícula</label>
+                                <input type="text" value={matricula} onChange={e => setMatricula(e.target.value)} className="w-full p-3 mt-1 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" required />
+                            </div>
+                            <button type="submit" disabled={loading} className="w-full py-3 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 flex justify-center items-center">
+                                {loading && <Loader2 className="w-5 h-5 mr-2 animate-spin" />} Salvar Alterações
+                            </button>
+                        </form>
+                    ) : (
+                        <form onSubmit={handleSaveSecurity} className="space-y-6">
+                            <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                                <p className="text-sm text-yellow-800 dark:text-yellow-200 flex items-center">
+                                    <AlertTriangle className="w-4 h-4 mr-2" />
+                                    Para alterar email ou senha, você deve ter feito login recentemente.
+                                </p>
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Email de Acesso</label>
+                                <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full p-3 mt-1 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" required />
+                            </div>
+                            <div>
+                                <label className="text-sm font-medium dark:text-slate-300">Nova Senha (deixe em branco para manter)</label>
+                                <div className="relative">
+                                    <Lock className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400" />
+                                    <input type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} className="w-full p-3 pl-10 mt-1 border rounded-lg dark:bg-gray-800 dark:border-gray-700 dark:text-white" placeholder="Mínimo 6 caracteres" />
+                                </div>
+                            </div>
+                            <button type="submit" disabled={loading} className="w-full py-3 bg-red-600 text-white rounded-lg font-bold hover:bg-red-700 flex justify-center items-center">
+                                {loading && <Loader2 className="w-5 h-5 mr-2 animate-spin" />} Atualizar Segurança
+                            </button>
+                        </form>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
     const { handleLogin } = useAuthContext();
     const { setMessage: setGlobalMessage } = useGlobalMessage();
@@ -1187,6 +1372,7 @@ const ServidorDashboard = () => {
     const [actionToConfirm, setActionToConfirm] = useState(null); // <-- ADICIONE ESTE ESTADO
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [solicitacoes, setSolicitacoes] = useState([]);
+    const [isProfileOpen, setIsProfileOpen] = useState(false); // <-- ADICIONE
 
     const [viewDate, setViewDate] = useState(getTodayISOString());
 
@@ -1522,6 +1708,20 @@ const ServidorDashboard = () => {
                             )}
                         </button>
 
+                            {/* --- 👇 BOTÃO DE PERFIL 👇 --- */}
+                        <button 
+                            onClick={() => setIsProfileOpen(true)}
+                            className="p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors"
+                            title="Meu Perfil"
+                        >
+                            {user.photoURL ? (
+                                <img src={user.photoURL} alt="Perfil" className="w-5 h-5 rounded-full object-cover" />
+                            ) : (
+                                <UserCircle className="w-5 h-5" />
+                            )}
+                        </button>
+                        {/* --- 👆 FIM DO BOTÃO 👆 --- */}
+
                         <button
                             onClick={handleLogout}
                             className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 transition duration-150 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"
@@ -1679,6 +1879,14 @@ const ServidorDashboard = () => {
                     onCancel={() => setActionToConfirm(null)}
                     isLoading={clockInLoading}
                 />
+
+                        {/* 👇 COLE AQUI O MODAL DE PERFIL 👇 */}
+                <ProfileModal 
+                    isOpen={isProfileOpen} 
+                    onClose={() => setIsProfileOpen(false)} 
+                />
+                {/* 👆 FIM DA ADIÇÃO 👆 */}
+                        
         </div>
     </div>
     );
@@ -1694,6 +1902,7 @@ const GestorDashboard = () => {
     const [servidoresDaUnidade, setServidoresDaUnidade] = useState([]);
     const [pontosDosServidores, setPontosDosServidores] = useState({});
     const [loadingRegistros, setLoadingRegistros] = useState(true);
+    const [isProfileOpen, setIsProfileOpen] = useState(false); // <-- ADICIONE
 
     const [selectedUnidadeId, setSelectedUnidadeId] = useState('all');
     const [searchTerm, setSearchTerm] = useState('');
@@ -2184,6 +2393,24 @@ const GestorDashboard = () => {
                             )}
                         </button>
 
+                            {/* ... ThemeToggleButton e Bell Button ... */}
+
+                        {/* --- 👇 BOTÃO DE PERFIL 👇 --- */}
+                        <button 
+                            onClick={() => setIsProfileOpen(true)}
+                            className="p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors"
+                            title="Meu Perfil"
+                        >
+                            {user.photoURL ? (
+                                <img src={user.photoURL} alt="Perfil" className="w-5 h-5 rounded-full object-cover" />
+                            ) : (
+                                <UserCircle className="w-5 h-5" />
+                            )}
+                        </button>
+                        {/* --- 👆 FIM DO BOTÃO 👆 --- */}
+                        
+                        {/* ... Botão de Sair ... */}
+
                         <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30">
                             <LogOut className="w-4 h-4 mr-1.5" /> Sair
                         </button>
@@ -2515,6 +2742,16 @@ const GestorDashboard = () => {
                     onCancel={() => setPointToDelete(null)}
                     isLoading={isDeleting}
                 />
+
+
+                {/* 👇 COLE AQUI O MODAL DE PERFIL 👇 */}
+                <ProfileModal 
+                    isOpen={isProfileOpen} 
+                    onClose={() => setIsProfileOpen(false)} 
+                />
+                {/* 👆 FIM DA ADIÇÃO 👆 */}
+
+                        
                 {/* --- 👇 ADICIONE O NOVO MODAL DE SALDO AQUI 👇 --- */}
                 <ServerBalanceModal
                     isOpen={!!viewingServerBalance}
@@ -2925,6 +3162,7 @@ const RHAdminDashboard = () => {
     const { user, handleLogout } = useAuthContext();
     const [activeTab, setActiveTab] = useState('users');
     const roleMap = { 'servidor': 'Servidor', 'estagiario': 'Estagiário', 'gestor': 'Gestor', 'rh': 'RH/Admin' };
+    const [isProfileOpen, setIsProfileOpen] = useState(false); // <-- ADICIONE
 
     return (
         <div className="p-4 md:p-8">
@@ -2939,6 +3177,20 @@ const RHAdminDashboard = () => {
                         <button onClick={handleLogout} className="flex items-center text-sm font-medium text-red-600 hover:text-red-700 p-2 rounded-lg hover:bg-red-100 dark:hover:bg-red-900/30"><LogOut className="w-4 h-4 mr-1.5" /> Sair</button>
                     </div>
                 </header>
+
+                    {/* --- 👇 COLE O BOTÃO DE PERFIL AQUI 👇 --- */}
+                        <button 
+                            onClick={() => setIsProfileOpen(true)}
+                            className="p-2 rounded-full bg-slate-200 dark:bg-gray-800 text-slate-600 dark:text-slate-300 hover:bg-slate-300 dark:hover:bg-gray-700 transition-colors"
+                            title="Meu Perfil"
+                        >
+                            {user.photoURL ? (
+                                <img src={user.photoURL} alt="Perfil" className="w-5 h-5 rounded-full object-cover" />
+                            ) : (
+                                <UserCircle className="w-5 h-5" />
+                            )}
+                        </button>
+                        {/* --- 👆 FIM DO BOTÃO 👆 --- */}
 
                 <div className="border-b mb-6 dark:border-gray-800">
                     <nav className="flex space-x-2">
@@ -3050,6 +3302,13 @@ const AppContent = () => {
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
 
+                    {/* 👇 COLE AQUI O MODAL DE PERFIL 👇 */}
+                <ProfileModal 
+                    isOpen={isProfileOpen} 
+                    onClose={() => setIsProfileOpen(false)} 
+                />
+                {/* 👆 FIM DA ADIÇÃO 👆 */}
+
                 <NewMessageModal 
                     isOpen={isNewMessageModalOpen}
                     onClose={() => setIsNewMessageModalOpen(false)} // Fechar sem marcar como lido (pelo 'X')
@@ -3061,6 +3320,7 @@ const AppContent = () => {
         </div>
     );
 }
+
 
 export default function App() {
     // VERIFICAÇÃO DE MANUTENÇÃO
