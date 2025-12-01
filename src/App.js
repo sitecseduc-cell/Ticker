@@ -10,10 +10,12 @@ import {
     LogIn, LogOut, Clock, User, Briefcase, RefreshCcw, Loader2, CheckCircle,
     AlertTriangle, XCircle, Pause, Mail, Users, FileText, Edit,
     Trash2, X, File, Send, Search, Plus, Home, MessageSquare, Sun, Moon,
-    Calendar, Bell, Eye, BellRing, Edit3 // <-- Ícone de Edição adicionado
+    Calendar, Bell, Eye, BellRing, Edit3, Wrench // <-- Ícone de Edição adicionado
 } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
+
+const SITE_EM_MANUTENCAO = false;
 
 // --- /src/firebase/config.js (Corrigido) ---
 const firebaseConfig = {
@@ -829,6 +831,29 @@ const ServerBalanceModal = ({ isOpen, onClose, serverName, balanceData }) => {
     );
 };
 // --- 👆 FIM DO NOVO COMPONENTE 👆 ---
+
+
+// --- TELA DE MANUTENÇÃO ---
+const MaintenanceScreen = () => {
+    return (
+        <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 dark:bg-gray-950 p-4">
+            <div className="bg-white dark:bg-gray-900 border-t-4 border-orange-500 rounded-xl shadow-2xl p-8 max-w-md w-full text-center animate-in fade-in zoom-in-95 duration-300">
+                <div className="mx-auto bg-orange-100 dark:bg-orange-900/30 w-20 h-20 rounded-full flex items-center justify-center mb-6">
+                    <Wrench className="w-10 h-10 text-orange-600 dark:text-orange-500 animate-pulse" />
+                </div>
+                <h1 className="text-3xl font-bold text-slate-800 dark:text-slate-100 mb-3">
+                    Em Manutenção
+                </h1>
+                <p className="text-slate-600 dark:text-slate-300 text-lg leading-relaxed">
+                    Site em manutenção, aguarde pelas próximas horas.
+                </p>
+                <div className="mt-6 text-xs text-slate-400 uppercase tracking-widest font-semibold">
+                    Equipe Ticker
+                </div>
+            </div>
+        </div>
+    );
+};
 
 
 const LoginScreen = ({ onSwitchToSignUp, onSwitchToForgotPassword }) => {
@@ -3034,6 +3059,13 @@ const AppContent = () => {
 }
 
 export default function App() {
+    // VERIFICAÇÃO DE MANUTENÇÃO
+    // Se a constante lá em cima for verdadeira, retorna a tela de aviso e para tudo.
+    if (SITE_EM_MANUTENCAO) {
+        return <MaintenanceScreen />;
+    }
+
+    // Se for falso, carrega o site normalmente
     return (
         <ThemeProvider>
             <GlobalMessageProvider>
