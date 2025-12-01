@@ -3203,6 +3203,13 @@ const RHAdminDashboard = () => {
                 {activeTab === 'users' && <UserManagement />}
                 {activeTab === 'units' && <UnitManagement />}
                 {activeTab === 'messages' && <GlobalMessagesManager role="rh" />}
+
+                {/* 👇 COLE AQUI O MODAL DE PERFIL 👇 */}
+                <ProfileModal 
+                    isOpen={isProfileOpen} 
+                    onClose={() => setIsProfileOpen(false)} 
+                />
+                {/* 👆 FIM DA ADIÇÃO 👆 */}
             </div>
         </div>
     );
@@ -3301,13 +3308,6 @@ const AppContent = () => {
                 ) : (
                     dashboardMap[role] || <p>Perfil de usuário desconhecido.</p>
                 )}
-
-                    {/* 👇 COLE AQUI O MODAL DE PERFIL 👇 */}
-                <ProfileModal 
-                    isOpen={isProfileOpen} 
-                    onClose={() => setIsProfileOpen(false)} 
-                />
-                {/* 👆 FIM DA ADIÇÃO 👆 */}
 
                 <NewMessageModal 
                     isOpen={isNewMessageModalOpen}
