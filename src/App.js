@@ -17,7 +17,7 @@ import 'jspdf-autotable';
 
 
 //________________________________
-const SITE_EM_MANUTENCAO = false;//|  PARA ATIVAR O MODO MANUTENÇÃO DO TICKER, VIRE A CHAVE PARA "TRUE". PARA DESATIVAR "FALSE"
+const SITE_EM_MANUTENCAO = true;//|  PARA ATIVAR O MODO MANUTENÇÃO DO TICKER, VIRE A CHAVE PARA "TRUE". PARA DESATIVAR "FALSE"
 //________________________________|
 
 
