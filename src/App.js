@@ -15,7 +15,11 @@ import {
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-const SITE_EM_MANUTENCAO = true;
+
+//________________________________
+const SITE_EM_MANUTENCAO = true;//|  PARA ATIVAR O MODO MANUTENÇÃO DO TICKER, VIRE A CHAVE PARA "TRUE". PARA DESATIVAR "FALSE"
+//________________________________|
+
 
 // --- /src/firebase/config.js (Corrigido) ---
 const firebaseConfig = {
