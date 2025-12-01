@@ -15,7 +15,7 @@ import {
 import { jsPDF } from 'jspdf';
 import 'jspdf-autotable';
 
-const SITE_EM_MANUTENCAO = false;
+const SITE_EM_MANUTENCAO = true;
 
 // --- /src/firebase/config.js (Corrigido) ---
 const firebaseConfig = {
