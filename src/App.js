@@ -901,7 +901,8 @@ const ProfileModal = ({ isOpen, onClose }) => {
         e.preventDefault();
         setLoading(true);
         try {
-            let photoURL = user.photoURL;
+            // Se user.photoURL for undefined, usamos null
+            let photoURL = user.photoURL || null;
 
             // 1. Upload da Foto (se houver)
             if (photoFile) {
